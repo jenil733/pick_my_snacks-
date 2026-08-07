@@ -8,8 +8,18 @@ void main() {
       staffId: 1,
       paymentMode: 'cash',
       products: [
-        SaveOrderProductRequest(productId: 3, quantity: 2),
-        SaveOrderProductRequest(productId: 6, quantity: 1),
+        SaveOrderProductRequest(
+          productId: 3,
+          quantity: 2,
+          unitValue: 0.56,
+          unit: 'kg',
+        ),
+        SaveOrderProductRequest(
+          productId: 6,
+          quantity: 1,
+          unitValue: 1,
+          unit: 'lt',
+        ),
       ],
     );
 
@@ -18,9 +28,13 @@ void main() {
     expect(fields['staff_id'], 1);
     expect(fields['discount_type'], 'none');
     expect(fields['products[0][product_id]'], 3);
-    expect(fields['products[0][qty]'], 2);
+    expect(fields['products[0][qty]'], '2kg');
+    expect(fields['products[0][unit_value]'], 0.56);
+    expect(fields['products[0][unit]'], 'kg');
     expect(fields['products[1][product_id]'], 6);
-    expect(fields['products[1][qty]'], 1);
+    expect(fields['products[1][qty]'], '1lt');
+    expect(fields['products[1][unit_value]'], 1);
+    expect(fields['products[1][unit]'], 'lt');
     expect(fields, isNot(contains('gst')));
     expect(fields, isNot(contains('subtotal')));
     expect(fields, isNot(contains('total')));

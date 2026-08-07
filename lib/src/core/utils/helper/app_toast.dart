@@ -8,16 +8,27 @@ class AppToast {
 
   static OverlayEntry? _entry;
   static Timer? _timer;
+  static String? _visibleMessage;
+  static DateTime? _shownAt;
 
   static void show(
     BuildContext context,
     String message, {
     bool isError = false,
-    Duration duration = const Duration(seconds: 1),
+    Duration duration = const Duration(milliseconds: 850),
   }) {
+    final now = DateTime.now();
+    if (_entry?.mounted == true &&
+        _visibleMessage == message &&
+        _shownAt != null &&
+        now.difference(_shownAt!) < const Duration(seconds: 2)) {
+      return;
+    }
     dismiss();
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
+    _visibleMessage = message;
+    _shownAt = now;
 
     _entry = OverlayEntry(
       builder: (context) => Positioned(
@@ -59,6 +70,8 @@ class AppToast {
                     Flexible(
                       child: Text(
                         message,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
                           fontFamily: 'Poppins',
@@ -85,7 +98,12 @@ class AppToast {
   }
 
   static void error(BuildContext context, String message) {
-    show(context, message, isError: true);
+    show(
+      context,
+      message,
+      isError: true,
+      duration: const Duration(milliseconds: 1200),
+    );
   }
 
   static void dismiss() {
@@ -93,6 +111,7 @@ class AppToast {
     _timer = null;
     final entry = _entry;
     _entry = null;
+    _visibleMessage = null;
     if (entry?.mounted == true) entry!.remove();
   }
 }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "563430948771",
+    "project_id": "pick-my-snacks",
+    "storage_bucket": "pick-my-snacks.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:563430948771:android:f2a1f82d7d48f93db8a416",
+        "android_client_info": {
+          "package_name": "com.example.pick_my_snacks"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAvTS_N05If3Gwd2Mq9mo2mX5BCvWJpNGQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

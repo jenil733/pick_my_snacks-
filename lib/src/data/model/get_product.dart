@@ -26,6 +26,84 @@ class GetProductResponse {
   };
 }
 
+class LowStockProductsResponse {
+  const LowStockProductsResponse({
+    this.status,
+    this.message,
+    this.count,
+    this.data,
+  });
+
+  factory LowStockProductsResponse.fromJson(Map<String, dynamic> json) {
+    final rawData = json['data'];
+    return LowStockProductsResponse(
+      status: _toBool(json['status']),
+      message: json['message']?.toString(),
+      count: _toInt(json['count']),
+      data: rawData is List
+          ? rawData
+                .whereType<Map>()
+                .map((item) => Data.fromJson(Map<String, dynamic>.from(item)))
+                .toList()
+          : <Data>[],
+    );
+  }
+
+  final bool? status;
+  final String? message;
+  final int? count;
+  final List<Data>? data;
+}
+
+class OutOfStockProductsResponse {
+  const OutOfStockProductsResponse({
+    this.status,
+    this.message,
+    this.count,
+    this.data,
+  });
+
+  factory OutOfStockProductsResponse.fromJson(Map<String, dynamic> json) {
+    final rawData = json['data'];
+    return OutOfStockProductsResponse(
+      status: _toBool(json['status']),
+      message: json['message']?.toString(),
+      count: _toInt(json['count']),
+      data: rawData is List
+          ? rawData
+                .whereType<Map>()
+                .map((item) => Data.fromJson(Map<String, dynamic>.from(item)))
+                .toList()
+          : <Data>[],
+    );
+  }
+
+  final bool? status;
+  final String? message;
+  final int? count;
+  final List<Data>? data;
+}
+
+class NotificationCountResponse {
+  const NotificationCountResponse({this.status, this.message, this.count});
+
+  factory NotificationCountResponse.fromJson(Map<String, dynamic> json) {
+    final rawData = json['data'];
+    final data = rawData is Map
+        ? Map<String, dynamic>.from(rawData)
+        : const <String, dynamic>{};
+    return NotificationCountResponse(
+      status: _toBool(json['status']),
+      message: json['message']?.toString(),
+      count: _toInt(data['notification_count']),
+    );
+  }
+
+  final bool? status;
+  final String? message;
+  final int? count;
+}
+
 class Data {
   const Data({
     this.id,

@@ -3,12 +3,14 @@ import 'package:get/get.dart';
 import 'package:pick_my_snacks/src/core/const/appcolors.dart';
 import 'package:pick_my_snacks/src/core/utils/helper/texthelper.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
+import 'package:pick_my_snacks/src/presentation/view/homescreen/kot_tables_view.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_summary_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/cart_panel.dart';
-import 'package:pick_my_snacks/src/presentation/widgets/homescreen/common_widgets.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/external_qr_scanner_button.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/held_bills_panel.dart';
+import 'package:pick_my_snacks/src/presentation/widgets/homescreen/notification_button.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/products_panel.dart';
+import 'package:pick_my_snacks/src/presentation/widgets/homescreen/pos_side_menu.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/staff_menu.dart';
 import 'package:pick_my_snacks/src/presentation/view/homescreen/mobile/mobile_home_screen.dart';
 import 'package:pick_my_snacks/src/presentation/view/homescreen/tablet/tablet_home_screen.dart';
@@ -43,37 +45,54 @@ class _DesktopHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _TopBar(controller: controller),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: 29,
-                      child: ProductsPanel(controller: controller),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 39,
-                      child: CartPanel(controller: controller),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 32,
-                      child: BillSummaryPanel(controller: controller),
-                    ),
-                  ],
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (controller.flow.value == PosFlow.kot &&
+            controller.kotStage.value != KotStage.tables) {
+          controller.showKotTables();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        drawer: PosSideMenu(controller: controller),
+        body: SafeArea(
+          child: Column(
+            children: [
+              _TopBar(controller: controller),
+              Expanded(
+                child: Obx(
+                  () =>
+                      controller.flow.value == PosFlow.kot &&
+                          controller.kotStage.value != KotStage.order
+                      ? KotTablesView(controller: controller)
+                      : Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                flex: 29,
+                                child: ProductsPanel(controller: controller),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                flex: 39,
+                                child: CartPanel(controller: controller),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                flex: 32,
+                                child: BillSummaryPanel(controller: controller),
+                              ),
+                            ],
+                          ),
+                        ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -103,7 +122,31 @@ class _TopBar extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          const PulsingAppLogo(width: 230, height: 68, canvasSize: 205),
+          Positioned(
+            left: 14,
+            child: Builder(
+              builder: (context) => IconButton(
+                tooltip: 'Open menu',
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                style: IconButton.styleFrom(foregroundColor: Colors.white),
+                icon: const Icon(Icons.menu_rounded, size: 28),
+              ),
+            ),
+          ),
+          Obx(
+            () => Text(
+              controller.flow.value == PosFlow.kot
+                  ? controller.kotStage.value == KotStage.tables
+                        ? 'KOT Tables'
+                        : controller.kotStage.value == KotStage.details
+                        ? 'Table ${controller.selectedKotTableNumber.value}'
+                        : 'Table ${controller.activeTableNumber.value}'
+                  : controller.flow.value == PosFlow.takeAway
+                  ? 'Take Away'
+                  : 'Billing',
+              style: TextHelper.whiteButton.copyWith(fontSize: 18),
+            ),
+          ),
           Positioned(
             right: 18,
             child: Row(
@@ -115,11 +158,15 @@ class _TopBar extends StatelessWidget {
                   showLabel: true,
                 ),
                 const SizedBox(width: 10),
+                const NotificationButton(),
+                const SizedBox(width: 10),
                 Obx(
-                  () => _HeldBillsButton(
-                    count: controller.heldBillCount,
-                    onTap: () => showHeldBillsPanel(context, controller),
-                  ),
+                  () => controller.flow.value == PosFlow.takeAway
+                      ? const SizedBox.shrink()
+                      : _HeldBillsButton(
+                          count: controller.heldBillCount,
+                          onTap: () => showHeldBillsPanel(context, controller),
+                        ),
                 ),
               ],
             ),

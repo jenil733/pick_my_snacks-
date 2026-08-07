@@ -31,4 +31,25 @@ void main() {
     expect(response.data!.single.gst, 59.75);
     expect(response.data!.single.total, 1254.75);
   });
+
+  test('parses held bills returned inside a nested data object', () {
+    final response = GetHoldOrdersResponse.fromJson({
+      'status': true,
+      'data': {
+        'held_bills': [
+          {
+            'id': 82,
+            'order_id': '82',
+            'items_count': 1,
+            'total': '15.00',
+            'status': 'hold',
+          },
+        ],
+      },
+    });
+
+    expect(response.data, hasLength(1));
+    expect(response.data!.single.id, 82);
+    expect(response.data!.single.total, 15);
+  });
 }

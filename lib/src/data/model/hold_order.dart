@@ -47,7 +47,13 @@ class HoldOrderRequest {
     for (var index = 0; index < products.length; index++) {
       final product = products[index];
       fields['products[$index][product_id]'] = product.productId;
-      fields['products[$index][qty]'] = product.quantity;
+      fields['products[$index][qty]'] = product.apiQuantity;
+      if (product.unitValue != null) {
+        fields['products[$index][unit_value]'] = product.unitValue;
+      }
+      if (product.unit.trim().isNotEmpty) {
+        fields['products[$index][unit]'] = product.unit.trim();
+      }
     }
     return fields;
   }

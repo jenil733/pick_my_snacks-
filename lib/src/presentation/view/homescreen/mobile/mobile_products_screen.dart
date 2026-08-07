@@ -86,9 +86,9 @@ class MobileProductsScreen extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final product = products[index];
-                final quantity = cartItems
-                    .where((item) => item.product.id == product.id)
-                    .fold(0, (sum, item) => sum + item.quantity);
+                final cartItem = cartItems.firstWhereOrNull(
+                  (item) => item.product.id == product.id,
+                );
                 return Material(
                   color: AppColors.surface,
                   shape: RoundedRectangleBorder(
@@ -134,7 +134,7 @@ class MobileProductsScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          quantity == 0
+                          cartItem == null
                               ? SizedBox.square(
                                   dimension: 42,
                                   child: IconButton.filled(
@@ -153,14 +153,8 @@ class MobileProductsScreen extends StatelessWidget {
                                   key: ValueKey(
                                     'product-quantity-${product.id}',
                                   ),
-                                  quantity: quantity,
-                                  onRemove: () {
-                                    final item = controller.cart.firstWhere(
-                                      (item) => item.product.id == product.id,
-                                    );
-                                    controller.decrement(item);
-                                  },
-                                  onAdd: () => controller.addProduct(product),
+                                  controller: controller,
+                                  item: cartItem,
                                 ),
                         ],
                       ),
@@ -221,14 +215,12 @@ class MobileProductsScreen extends StatelessWidget {
 class _QuantityControl extends StatelessWidget {
   const _QuantityControl({
     super.key,
-    required this.quantity,
-    required this.onRemove,
-    required this.onAdd,
+    required this.controller,
+    required this.item,
   });
 
-  final int quantity;
-  final VoidCallback onRemove;
-  final VoidCallback onAdd;
+  final HomeController controller;
+  final CartItem item;
 
   @override
   Widget build(BuildContext context) {
@@ -244,21 +236,14 @@ class _QuantityControl extends StatelessWidget {
           IconButton(
             visualDensity: VisualDensity.compact,
             tooltip: 'Remove one',
-            onPressed: onRemove,
+            onPressed: () => controller.decrement(item),
             icon: const Icon(Icons.remove_rounded, size: 18),
           ),
-          SizedBox(
-            width: 20,
-            child: Text(
-              '$quantity',
-              textAlign: TextAlign.center,
-              style: TextHelper.bodySemiBold,
-            ),
-          ),
+          EditableItemAmount(controller: controller, item: item, width: 34),
           IconButton(
             visualDensity: VisualDensity.compact,
             tooltip: 'Add one',
-            onPressed: onAdd,
+            onPressed: () => controller.increment(item),
             icon: const Icon(Icons.add_rounded, size: 18),
           ),
         ],

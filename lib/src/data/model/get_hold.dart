@@ -3,11 +3,16 @@ class GetHoldOrdersResponse {
 
   factory GetHoldOrdersResponse.fromJson(Map<String, dynamic> json) {
     final rawData = json['data'];
+    final rawOrders = rawData is List
+        ? rawData
+        : rawData is Map
+        ? rawData['held_bills'] ?? rawData['orders'] ?? rawData['data']
+        : json['held_bills'] ?? json['orders'];
     return GetHoldOrdersResponse(
       status: _toBool(json['status']),
       message: json['message']?.toString(),
-      data: rawData is List
-          ? rawData
+      data: rawOrders is List
+          ? rawOrders
                 .whereType<Map>()
                 .map(
                   (item) => HeldOrderSummary.fromJson(

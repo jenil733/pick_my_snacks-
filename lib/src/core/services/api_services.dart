@@ -20,31 +20,45 @@ class ApiService {
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+          log('${options.method} ${options.uri}', name: 'ApiRequest');
           handler.next(options);
         },
+        onResponse: (response, handler) {
+          log(
+            '${response.requestOptions.method} '
+            '${response.requestOptions.uri} -> ${response.statusCode}',
+            name: 'ApiResponse',
+          );
+          handler.next(response);
+        },
         onError: (error, handler) async {
-          log('API error: ${error.message}', name: 'ApiService', error: error);
-          if (error.response?.data != null) {
+          log(
+            '${error.requestOptions.method} ${error.requestOptions.uri} -> '
+            '${error.response?.statusCode ?? 'NETWORK_ERROR'}',
+            name: 'ApiResponse',
+          );
+          if (!_isExpectedKotRecoveryResponse(error)) {
             log(
-              'API response ${error.response?.statusCode}: '
-              '${error.response?.data}',
+              'API error: ${error.message}',
               name: 'ApiService',
+              error: error,
             );
+            if (error.response?.data != null) {
+              log(
+                'API response ${error.response?.statusCode}: '
+                '${error.response?.data}',
+                name: 'ApiService',
+              );
+            }
           }
 
           if (_isNetworkError(error)) {
-            _showMessage(
-              title: 'No internet connection',
-              message: 'Check your connection and try again.',
-            );
             handler.next(error);
             return;
           }
 
           if (error.response?.statusCode == 401) {
             await _handleUnauthorized();
-          } else {
-            _showMessage(title: 'Error', message: _responseMessage(error));
           }
 
           handler.next(error);
@@ -91,9 +105,36 @@ class ApiService {
   Future<Map<String, dynamic>> get(
     String endpoint, {
     Map<String, dynamic>? params,
+    Set<int> acceptedStatusCodes = const <int>{},
   }) {
     return _handleResponse(
-      () => _dio.get<dynamic>(endpoint, queryParameters: params),
+      () => _dio.get<dynamic>(
+        endpoint,
+        queryParameters: params,
+        options: acceptedStatusCodes.isEmpty
+            ? null
+            : Options(
+                validateStatus: (status) =>
+                    status != null &&
+                    ((status >= 200 && status < 300) ||
+                        acceptedStatusCodes.contains(status)),
+              ),
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> getWithData(String endpoint, {dynamic data}) {
+    return _handleResponse(
+      () => _dio.request<dynamic>(
+        endpoint,
+        data: data,
+        options: Options(
+          method: 'GET',
+          contentType: data is FormData
+              ? 'multipart/form-data'
+              : Headers.jsonContentType,
+        ),
+      ),
     );
   }
 
@@ -138,12 +179,14 @@ class ApiService {
       }
       return <String, dynamic>{'data': responseData};
     } on DioException catch (error, stackTrace) {
-      log(
-        'Request failed: ${error.message}',
-        name: 'ApiService',
-        error: error,
-        stackTrace: stackTrace,
-      );
+      if (!_isExpectedKotRecoveryResponse(error)) {
+        log(
+          'Request failed: ${error.message}',
+          name: 'ApiService',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       rethrow;
     } catch (error, stackTrace) {
       log(
@@ -167,24 +210,23 @@ class ApiService {
     };
   }
 
-  String _responseMessage(DioException error) {
+  static bool _isExpectedKotRecoveryResponse(DioException error) {
     final data = error.response?.data;
-    if (data is Map) {
-      final errors = data['errors'];
-      if (errors is Map) {
-        final messages = errors.values
-            .expand(
-              (value) => value is List
-                  ? value.map((item) => item.toString())
-                  : <String>[value.toString()],
-            )
-            .where((message) => message.trim().isNotEmpty)
-            .toList();
-        if (messages.isNotEmpty) return messages.join('\n');
-      }
-      if (data['message'] != null) return data['message'].toString();
+    if (data is! Map) return false;
+    final message = data['message']?.toString().trim().toLowerCase() ?? '';
+    final requestPath = error.requestOptions.path.toLowerCase();
+    if (error.response?.statusCode == 404 &&
+        requestPath.contains('delete_hold_bill/') &&
+        message.contains('hold bill') &&
+        message.contains('not found')) {
+      return true;
     }
-    return 'Something went wrong. Please try again.';
+    if (error.response?.statusCode != 422) return false;
+    final details = data['data'];
+    final hasHoldId = details is Map && details['hold_order_id'] != null;
+    return hasHoldId &&
+        message.contains('processing order') &&
+        message.contains('no products');
   }
 
   Future<void> _handleUnauthorized() async {
@@ -196,13 +238,13 @@ class ApiService {
       _storage.remove(LocalStorageService.authTokenKey),
       _storage.remove(LocalStorageService.selectedStaffIdKey),
     ]);
-    _showMessage(title: 'Session expired', message: 'Please log in again.');
+    _showMessage('Please log in again.');
     if (Get.currentRoute != AppRoutes.login) {
       Get.offAllNamed(AppRoutes.login);
     }
   }
 
-  void _showMessage({required String title, required String message}) {
+  void _showMessage(String message) {
     final context = Get.context;
     if (context == null) return;
     AppToast.error(context, message);

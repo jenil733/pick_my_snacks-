@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:pick_my_snacks/src/core/const/appcolors.dart';
 import 'package:pick_my_snacks/src/core/const/appimages.dart';
+import 'package:pick_my_snacks/src/core/utils/helper/app_toast.dart';
 import 'package:pick_my_snacks/src/core/utils/helper/texthelper.dart';
+import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
 
 class DashboardPanel extends StatelessWidget {
   const DashboardPanel({required this.child, super.key});
@@ -224,6 +226,155 @@ class _DefaultProductIcon extends StatelessWidget {
 
 String money(double value) => '₹${value.toStringAsFixed(2)}';
 
+class EditableItemAmount extends StatelessWidget {
+  const EditableItemAmount({
+    required this.controller,
+    required this.item,
+    this.width = 38,
+    super.key,
+  });
+
+  final HomeController controller;
+  final CartItem item;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Tap to edit quantity or weight',
+      child: InkWell(
+        onTap: () => showItemAmountDialog(context, controller, item),
+        child: SizedBox(
+          width: width,
+          height: 28,
+          child: Center(
+            child: Text(
+              _displayAmount(item.editableAmount),
+              textAlign: TextAlign.center,
+              style: TextHelper.bodySemiBold.copyWith(
+                decoration: TextDecoration.underline,
+                decorationStyle: TextDecorationStyle.dotted,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> showItemAmountDialog(
+  BuildContext context,
+  HomeController controller,
+  CartItem item,
+) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) => _ItemAmountDialog(controller: controller, item: item),
+  );
+}
+
+class _ItemAmountDialog extends StatefulWidget {
+  const _ItemAmountDialog({required this.controller, required this.item});
+
+  final HomeController controller;
+  final CartItem item;
+
+  @override
+  State<_ItemAmountDialog> createState() => _ItemAmountDialogState();
+}
+
+class _ItemAmountDialogState extends State<_ItemAmountDialog> {
+  late final TextEditingController _inputController;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _inputController = TextEditingController(
+      text: _displayAmount(widget.item.editableAmount),
+    );
+  }
+
+  @override
+  void dispose() {
+    _inputController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      surfaceTintColor: AppColors.surface,
+      title: const Text('Edit quantity or weight'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.item.product.name, style: TextHelper.bodySemiBold),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _inputController,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Quantity / weight',
+              hintText: 'Example: 0.5 for half kilogram',
+              errorText: error,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.text,
+          ),
+          onPressed: () {
+            final normalized = _inputController.text.trim().replaceAll(
+              ',',
+              '.',
+            );
+            final amount = double.tryParse(normalized);
+            if (amount == null || amount <= 0) {
+              setState(() {
+                error = 'Enter a value greater than 0.';
+              });
+              return;
+            }
+            final validationError = widget.controller.setItemAmount(
+              widget.item,
+              amount,
+            );
+            if (validationError != null) {
+              setState(() {
+                error = validationError;
+              });
+              return;
+            }
+            Navigator.of(context).pop();
+          },
+          child: const Text('Apply'),
+        ),
+      ],
+    );
+  }
+}
+
+String _displayAmount(double value) {
+  return value
+      .toStringAsFixed(3)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
+}
+
 Future<bool> showConfirmationDialog({
   required BuildContext context,
   required String title,
@@ -267,4 +418,34 @@ Future<bool> showConfirmationDialog({
     ),
   );
   return result ?? false;
+}
+
+Future<void> deleteKotTableOrder(
+  BuildContext context,
+  HomeController controller,
+) async {
+  final tableId =
+      controller.activeTableNumber.value ??
+      controller.selectedKotTableNumber.value;
+  if (tableId == null) return;
+  final confirmed = await showConfirmationDialog(
+    context: context,
+    title: 'Delete table order?',
+    message: 'All items for Table $tableId will be removed.',
+    confirmLabel: 'Delete',
+    icon: Icons.delete_outline_rounded,
+    confirmColor: AppColors.error,
+  );
+  if (!confirmed || !context.mounted) return;
+  final deleted = await controller.deleteActiveKotOrder();
+  if (!context.mounted) return;
+  if (!deleted) {
+    AppToast.error(
+      context,
+      controller.deleteKotOrderError.value ??
+          'Unable to delete the kitchen order.',
+    );
+    return;
+  }
+  AppToast.show(context, 'Table $tableId is now free.');
 }

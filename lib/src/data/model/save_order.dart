@@ -26,6 +26,7 @@ class SaveOrderRequest {
       'staff_id': staffId,
       'discount_type': discountType,
       'payment_mode': paymentMode,
+      'is_kot': 0,
     };
 
     if (discountType != 'none') {
@@ -45,7 +46,14 @@ class SaveOrderRequest {
     for (var index = 0; index < products.length; index++) {
       final product = products[index];
       fields['products[$index][product_id]'] = product.productId;
-      fields['products[$index][qty]'] = product.quantity;
+      fields['products[$index][qty]'] = product.apiQuantity;
+      if (product.unitValue != null) {
+        fields['products[$index][unit_value]'] = product.unitValue;
+      }
+      if (product.unit.trim().isNotEmpty) {
+        fields['products[$index][unit]'] = product.unit.trim();
+      }
+      fields['products[$index][is_kot]'] = 0;
     }
     return fields;
   }
@@ -55,15 +63,43 @@ class SaveOrderProductRequest {
   const SaveOrderProductRequest({
     required this.productId,
     required this.quantity,
+    this.unitValue,
+    this.unit = '',
   });
 
   final int productId;
-  final int quantity;
+  final num quantity;
+  final num? unitValue;
+  final String unit;
+
+  String get apiQuantity {
+    final normalizedUnit = _normalizedQuantityUnit(unit);
+    return '${_formatQuantityValue(quantity)}$normalizedUnit';
+  }
 
   Map<String, dynamic> toJson() => {
     'product_id': productId,
     'quantity': quantity,
+    if (unitValue != null) 'unit_value': unitValue,
+    if (unit.trim().isNotEmpty) 'unit': unit.trim(),
   };
+}
+
+String _formatQuantityValue(num value) {
+  if (value is int || value == value.roundToDouble()) {
+    return value.toInt().toString();
+  }
+  return value
+      .toStringAsFixed(3)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
+}
+
+String _normalizedQuantityUnit(String value) {
+  final unit = value.trim().replaceAll(RegExp(r'\s+'), '').toLowerCase();
+  if (unit.isEmpty) return 'pcs';
+  if (unit == 'pc' || unit == 'piece' || unit == 'pieces') return 'pcs';
+  return unit;
 }
 
 class SaveOrderResponse {

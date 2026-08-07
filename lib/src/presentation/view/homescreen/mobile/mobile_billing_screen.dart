@@ -7,7 +7,9 @@ import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_contr
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_adjustment_dialogs.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_summary_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/common_widgets.dart';
+import 'package:pick_my_snacks/src/presentation/widgets/homescreen/take_away_orders_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/payment_method_dropdown.dart';
+import 'package:pick_my_snacks/src/printing/printer_settings_model.dart';
 
 class MobileBillingScreen extends StatelessWidget {
   const MobileBillingScreen({
@@ -96,30 +98,75 @@ class MobileBillingScreen extends StatelessWidget {
                             (item) => Padding(
                               padding: const EdgeInsets.symmetric(vertical: 9),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
+                                  if (controller.flow.value == PosFlow.kot ||
+                                      controller.flow.value ==
+                                          PosFlow.takeAway) ...[
+                                    Tooltip(
+                                      message:
+                                          controller.flow.value ==
+                                              PosFlow.takeAway
+                                          ? 'Include ${item.product.name} in Kitchen Bill'
+                                          : 'Send ${item.product.name} to kitchen',
+                                      child: Checkbox(
+                                        value: controller.isKitchenItemSelected(
+                                          item,
+                                        ),
+                                        onChanged: (value) =>
+                                            controller.setKitchenItemSelected(
+                                              item,
+                                              value ?? false,
+                                            ),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
                                   Expanded(
                                     child: Text(
                                       item.product.name,
                                       maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
                                       style: TextHelper.body,
                                     ),
                                   ),
-                                  Text(
-                                    item.displayUnit,
-                                    style: TextHelper.poppins,
-                                  ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   BillQuantityControl(
                                     controller: controller,
                                     item: item,
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 6),
                                   SizedBox(
-                                    width: 62,
-                                    child: Text(
-                                      money(item.total),
-                                      textAlign: TextAlign.right,
-                                      style: TextHelper.bodySemiBold,
+                                    width: 68,
+                                    child: Column(
+                                      children: [
+                                        IconButton(
+                                          tooltip:
+                                              'Delete ${item.product.name}',
+                                          onPressed: () =>
+                                              _deleteItem(context, item),
+                                          visualDensity: VisualDensity.compact,
+                                          constraints:
+                                              const BoxConstraints.tightFor(
+                                                width: 34,
+                                                height: 34,
+                                              ),
+                                          color: AppColors.delete,
+                                          icon: const Icon(
+                                            Icons.delete_outline_rounded,
+                                            size: 19,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          money(item.total),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          style: TextHelper.bodySemiBold,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -138,128 +185,274 @@ class MobileBillingScreen extends StatelessWidget {
               color: AppColors.surface,
               border: Border(top: BorderSide(color: AppColors.border)),
             ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        key: const ValueKey('mobile-new-bill'),
-                        onPressed:
-                            controller.isSavingOrder.value ||
-                                controller.isHoldingOrder.value
-                            ? null
-                            : () {
-                                controller.startNewBill();
-                                AppToast.show(
-                                  context,
-                                  'A new bill has been started.',
-                                );
-                              },
-                        icon: const Icon(Icons.note_add_outlined, size: 19),
-                        label: const Text('New Bill'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.yellow,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(48),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed:
-                            controller.cart.isEmpty ||
-                                controller.isSavingOrder.value
-                            ? null
-                            : () => printDuplicateBill(context, controller),
-                        icon: const Icon(Icons.copy_all_rounded, size: 18),
-                        label: const Text('Copy Bill'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed:
-                            controller.cart.isEmpty ||
-                                controller.isHoldingOrder.value
-                            ? null
-                            : () => holdBill(context, controller),
-                        icon: const Icon(
-                          Icons.pause_circle_outline_rounded,
-                          size: 18,
-                        ),
-                        label: Text(
-                          controller.isHoldingOrder.value
-                              ? 'Holding...'
-                              : 'Hold',
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.yellowDark,
-                          side: const BorderSide(color: AppColors.yellow),
-                          minimumSize: const Size.fromHeight(48),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 2,
-                      child: FilledButton(
-                        onPressed:
-                            controller.cart.isEmpty ||
-                                controller.isSavingOrder.value
-                            ? null
-                            : () => printReceipt(context, controller),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          disabledBackgroundColor: AppColors.divider,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          minimumSize: const Size.fromHeight(50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                controller.isSavingOrder.value
-                                    ? 'Saving Order...'
-                                    : 'Print Receipt',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Text(money(controller.total)),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.print_rounded, size: 19),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+            child: controller.flow.value == PosFlow.kot
+                ? _kotFooter(context)
+                : controller.flow.value == PosFlow.takeAway
+                ? _takeAwayFooter(context)
+                : _billingFooter(context),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _billingFooter(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed:
+                    controller.cart.isEmpty || controller.isHoldingOrder.value
+                    ? null
+                    : () => holdBill(context, controller),
+                icon: const Icon(Icons.pause_circle_outline_rounded, size: 18),
+                label: Text(
+                  controller.isHoldingOrder.value ? 'Holding...' : 'Hold',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.yellowDark,
+                  side: const BorderSide(color: AppColors.yellow),
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed:
+                    controller.cart.isEmpty || controller.isSavingOrder.value
+                    ? null
+                    : () => printDuplicateBill(context, controller),
+                icon: const Icon(Icons.copy_all_rounded, size: 18),
+                label: const Text('Copy Bill'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: controller.cart.isEmpty || controller.isSavingOrder.value
+                ? null
+                : () => printReceipt(context, controller),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.success,
+              disabledBackgroundColor: AppColors.divider,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize: const Size.fromHeight(50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    controller.isSavingOrder.value
+                        ? 'Saving Order...'
+                        : 'Print Receipt',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(money(controller.total)),
+                const SizedBox(width: 8),
+                const Icon(Icons.print_rounded, size: 19),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _takeAwayFooter(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => showTakeAwayOrdersPanel(
+                  context,
+                  controller,
+                  initialTab: TakeAwayOrdersTab.pending,
+                ),
+                icon: const Icon(Icons.pending_actions_rounded),
+                label: const Text('Pending'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => showTakeAwayOrdersPanel(
+                  context,
+                  controller,
+                  initialTab: TakeAwayOrdersTab.completed,
+                ),
+                icon: const Icon(Icons.task_alt_rounded),
+                label: const Text('Completed'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: controller.cart.isEmpty
+                    ? null
+                    : () => printTakeAwayBill(
+                        context,
+                        controller,
+                        role: PrinterRole.kitchen,
+                      ),
+                icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
+                label: const Text('Kitchen Bill'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.warning,
+                  disabledBackgroundColor: AppColors.divider,
+                  minimumSize: const Size.fromHeight(50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed:
+                    controller.cart.isEmpty ||
+                        controller.isSavingTakeAwayOrder.value
+                    ? null
+                    : () => completeTakeAway(context, controller),
+                icon: const Icon(Icons.takeout_dining_rounded, size: 19),
+                label: Text(
+                  controller.isSavingTakeAwayOrder.value
+                      ? 'Closing...'
+                      : controller.takeAwayHoldOrderId.value != null
+                      ? 'Close Order'
+                      : 'Take Away',
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  disabledBackgroundColor: AppColors.divider,
+                  minimumSize: const Size.fromHeight(50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _deleteItem(BuildContext context, CartItem item) async {
+    final removed = await controller.removeKotProduct(item);
+    if (!context.mounted) return;
+    if (!removed) {
+      AppToast.error(
+        context,
+        controller.removeKotProductError.value ??
+            'Unable to remove the product.',
+      );
+      return;
+    }
+    AppToast.show(context, '${item.product.name} was removed from the bill.');
+  }
+
+  Widget _kotFooter(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed:
+                controller.cart.isEmpty ||
+                    controller.isSavingKotOrder.value ||
+                    controller.isCompletingKotOrder.value
+                ? null
+                : () => holdKotTable(context, controller),
+            icon: const Icon(Icons.table_restaurant_outlined, size: 19),
+            label: Text(
+              controller.isSavingKotOrder.value ? 'Holding...' : 'Hold Table',
+            ),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed:
+                    (!controller.hasKitchenOrderAwaitingPrint &&
+                            !controller.hasSelectedPendingKitchenItems) ||
+                        controller.isSavingKotOrder.value
+                    ? null
+                    : () => printKitchen(context, controller),
+                icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
+                label: Text(
+                  controller.isSavingKotOrder.value
+                      ? 'Printing...'
+                      : 'Kitchen Bill',
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.warning,
+                  minimumSize: const Size.fromHeight(50),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed:
+                    controller.cart.isEmpty ||
+                        controller.isSavingOrder.value ||
+                        controller.isSavingKotOrder.value ||
+                        controller.isCompletingKotOrder.value ||
+                        controller.isRemovingKotProduct.value ||
+                        controller.isRemovingKotQuantity.value
+                    ? null
+                    : () => closeKotBill(context, controller),
+                icon: const Icon(Icons.receipt_long_rounded, size: 19),
+                label: Text(
+                  controller.isSavingKotOrder.value ||
+                          controller.isCompletingKotOrder.value
+                      ? 'Closing...'
+                      : 'Close Bill',
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  minimumSize: const Size.fromHeight(50),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

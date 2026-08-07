@@ -105,7 +105,8 @@ class HeldBillsPanel extends StatelessWidget {
                   final error = controller.heldOrdersError.value;
                   if (error != null &&
                       controller.heldOrderSummaries.isEmpty &&
-                      controller.heldBills.isEmpty) {
+                      (controller.usesBackendHeldOrders ||
+                          controller.heldBills.isEmpty)) {
                     return _HeldOrdersMessage(
                       message: error,
                       onRetry: controller.getHoldOrders,
@@ -133,7 +134,8 @@ class HeldBillsPanel extends StatelessWidget {
                     );
                   }
 
-                  if (controller.heldBills.isEmpty) {
+                  if (controller.usesBackendHeldOrders ||
+                      controller.heldBills.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,

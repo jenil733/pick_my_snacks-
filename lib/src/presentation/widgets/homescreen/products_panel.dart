@@ -141,42 +141,47 @@ class ProductsPanel extends StatelessWidget {
                                 (item) => item.product.id == product.id,
                               );
                           return isAdded
-                              ? Container(
-                                  key: ValueKey('product-added-${product.id}'),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 7,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.success.withValues(
-                                      alpha: .10,
+                              ? Tooltip(
+                                  message: 'Add another ${product.name}',
+                                  child: InkWell(
+                                    key: ValueKey(
+                                      'product-add-another-${product.id}',
                                     ),
+                                    onTap: () => controller.addProduct(product),
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: AppColors.success.withValues(
-                                        alpha: .35,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 9,
+                                        vertical: 7,
                                       ),
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.check_rounded,
-                                        color: AppColors.success,
-                                        size: 15,
-                                      ),
-                                      SizedBox(width: 3),
-                                      Text(
-                                        'Added',
-                                        style: TextStyle(
-                                          color: AppColors.success,
-                                          fontFamily: 'Poppins',
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.yellowLight,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: AppColors.yellow,
                                         ),
                                       ),
-                                    ],
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.add_rounded,
+                                            color: AppColors.yellowDark,
+                                            size: 16,
+                                          ),
+                                          SizedBox(width: 2),
+                                          Text(
+                                            '+1',
+                                            style: TextStyle(
+                                              color: AppColors.yellowDark,
+                                              fontFamily: 'Poppins',
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 )
                               : SoftIconButton(

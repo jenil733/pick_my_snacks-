@@ -45,4 +45,25 @@ void main() {
     expect(response.data!.products!.single.productId, 3);
     expect(response.data!.products!.single.qty, 2);
   });
+
+  test('parses a unit-bearing decimal quantity from a resumed product', () {
+    final response = ResumeOrderResponse.fromJson({
+      'status': true,
+      'data': {
+        'products': [
+          {
+            'product_id': 3,
+            'product_name': 'Mixture',
+            'price': '200.00',
+            'qty': '0.56kg',
+            'unit_value': '0.56',
+          },
+        ],
+      },
+    });
+
+    final product = response.data!.products!.single;
+    expect(product.qty, 0.56);
+    expect(product.unit, 'kg');
+  });
 }

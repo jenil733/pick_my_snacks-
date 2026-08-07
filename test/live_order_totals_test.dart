@@ -29,7 +29,7 @@ void main() {
         hasLength(controller.cart.length),
       );
       expect(
-        repository.requests.single.products.fold<int>(
+        repository.requests.single.products.fold<num>(
           0,
           (sum, item) => sum + item.quantity,
         ),
@@ -48,7 +48,7 @@ void main() {
         hasLength(controller.cart.length),
       );
       expect(
-        repository.requests.last.products.fold<int>(
+        repository.requests.last.products.fold<num>(
           0,
           (sum, item) => sum + item.quantity,
         ),

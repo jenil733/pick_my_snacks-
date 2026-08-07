@@ -108,6 +108,34 @@ class ReceiptPrinterService {
     return isConnected;
   }
 
+  Future<void> disconnect() async {
+    try {
+      await PrintBluetoothThermal.disconnect.timeout(
+        _statusTimeout,
+        onTimeout: () => false,
+      );
+    } catch (_) {
+      // A failed disconnect must not hide the result of a completed print.
+    }
+  }
+
+  Future<void> writeBytes(
+    List<int> bytes, {
+    String documentName = 'document',
+  }) async {
+    if (!await isConnected) {
+      throw const ReceiptPrinterException('The printer is not connected.');
+    }
+    final printed = await PrintBluetoothThermal.writeBytes(
+      bytes,
+    ).timeout(_printTimeout, onTimeout: () => false);
+    if (!printed) {
+      throw ReceiptPrinterException(
+        'The printer did not accept the $documentName. Please retry.',
+      );
+    }
+  }
+
   Future<void> printBluetoothReceipt({
     required List<CartItem> items,
     required double subtotal,
@@ -118,6 +146,13 @@ class ReceiptPrinterService {
     required String paymentMethod,
     required String orderNumber,
     required ReceiptPaperSize paperSize,
+    bool showRate = true,
+    bool showAmount = true,
+    bool showTotals = true,
+    bool separateProducts = false,
+    int endFeedLines = 3,
+    String? customerName,
+    String? customerPhone,
   }) async {
     if (!await isConnected) {
       throw const ReceiptPrinterException('The printer is not connected.');
@@ -133,6 +168,13 @@ class ReceiptPrinterService {
       paymentMethod: paymentMethod,
       orderNumber: orderNumber,
       paperSize: paperSize,
+      showRate: showRate,
+      showAmount: showAmount,
+      showTotals: showTotals,
+      separateProducts: separateProducts,
+      endFeedLines: endFeedLines,
+      customerName: customerName,
+      customerPhone: customerPhone,
     );
     final printed = await PrintBluetoothThermal.writeBytes(
       bytes,
@@ -179,6 +221,13 @@ class ReceiptPrinterService {
     required String paymentMethod,
     required String orderNumber,
     required ReceiptPaperSize paperSize,
+    bool showRate = true,
+    bool showAmount = true,
+    bool showTotals = true,
+    bool separateProducts = false,
+    int endFeedLines = 3,
+    String? customerName,
+    String? customerPhone,
   }) async {
     final profile = await CapabilityProfile.load();
     final printerPaperSize = paperSize == ReceiptPaperSize.mm58
@@ -238,6 +287,21 @@ class ReceiptPrinterService {
       ),
     );
     bytes.addAll(generator.text('Date $date', styles: receiptStyle));
+    final normalizedCustomerName = customerName?.trim();
+    if (normalizedCustomerName != null && normalizedCustomerName.isNotEmpty) {
+      bytes.addAll(
+        generator.text(
+          'Customer: $normalizedCustomerName',
+          styles: receiptStyle,
+        ),
+      );
+    }
+    final normalizedCustomerPhone = customerPhone?.trim();
+    if (normalizedCustomerPhone != null && normalizedCustomerPhone.isNotEmpty) {
+      bytes.addAll(
+        generator.text('Phone: $normalizedCustomerPhone', styles: receiptStyle),
+      );
+    }
     bytes.addAll(generator.hr());
     bytes.addAll(
       tableGenerator.row(
@@ -249,6 +313,8 @@ class ReceiptPrinterService {
           amount: 'Amount',
           productNameStyle: tableStyle,
           isHeader: true,
+          showRate: showRate,
+          showAmount: showAmount,
         ),
         multiLine: false,
       ),
@@ -256,7 +322,7 @@ class ReceiptPrinterService {
     bytes.addAll(generator.hr());
 
     for (var itemIndex = 0; itemIndex < items.length; itemIndex++) {
-      if (itemIndex > 0) {
+      if (itemIndex > 0 && !separateProducts) {
         // Use the same small gap between every pair of products.
         bytes.addAll(generator.rawBytes(const [27, 74, 12]));
       }
@@ -268,9 +334,21 @@ class ReceiptPrinterService {
       final wrappedProductName = _wrapParticulars(
         productName,
         paperSize: paperSize,
+        showRate: showRate,
+        showAmount: showAmount,
       );
       final useCompactProductName = wrappedProductName.length >= 3;
-      final compactNameWidth = paperSize == ReceiptPaperSize.mm58 ? 6 : 20;
+      final compactNameWidth = paperSize == ReceiptPaperSize.mm58
+          ? showRate
+                ? 6
+                : showAmount
+                ? 10
+                : 14
+          : showRate
+          ? 20
+          : showAmount
+          ? 24
+          : 30;
       final productNameLines = useCompactProductName
           ? _chunkText(productName, compactNameWidth)
           : wrappedProductName;
@@ -289,14 +367,21 @@ class ReceiptPrinterService {
               unit: isFirstLine ? productUnit : '',
               amount: isFirstLine ? _amount(item.total) : '',
               productNameStyle: productNameStyle,
+              showRate: showRate,
+              showAmount: showAmount,
             ),
             multiLine: false,
           ),
         );
       }
+      if (separateProducts) {
+        bytes.addAll(generator.hr());
+      }
     }
 
-    bytes.addAll(generator.hr(ch: '='));
+    if (!separateProducts) {
+      bytes.addAll(generator.hr(ch: '='));
+    }
     bytes.addAll(
       generator.text(
         _twoColumns('Total Items:', '$itemCount', charactersPerLine),
@@ -304,42 +389,44 @@ class ReceiptPrinterService {
       ),
     );
     bytes.addAll(generator.hr());
-    if (discount > 0) {
+    if (showTotals) {
+      if (discount > 0) {
+        bytes.addAll(
+          generator.text(
+            _moneyLine('Discount', -discount, charactersPerLine),
+            styles: receiptStyle,
+          ),
+        );
+      }
+      if (charge > 0) {
+        bytes.addAll(
+          generator.text(
+            _moneyLine('Charge', charge, charactersPerLine),
+            styles: receiptStyle,
+          ),
+        );
+      }
       bytes.addAll(
         generator.text(
-          _moneyLine('Discount', -discount, charactersPerLine),
-          styles: receiptStyle,
+          _moneyLine('Grand Total', total, charactersPerLine),
+          styles: const PosStyles(fontType: PosFontType.fontA, bold: true),
         ),
       );
-    }
-    if (charge > 0) {
+      bytes.addAll(generator.hr());
+      final gstPercentage = subtotal > 0 ? tax * 100 / subtotal : 0.0;
       bytes.addAll(
-        generator.text(
-          _moneyLine('Charge', charge, charactersPerLine),
-          styles: receiptStyle,
+        generator.imageRaster(
+          _gstTableImage(
+            paperSize: paperSize,
+            percentage: gstPercentage,
+            grandTotal: total,
+            gstAmount: tax,
+          ),
+          align: PosAlign.center,
         ),
       );
+      bytes.addAll(generator.hr());
     }
-    bytes.addAll(
-      generator.text(
-        _moneyLine('Grand Total', total, charactersPerLine),
-        styles: const PosStyles(fontType: PosFontType.fontA, bold: true),
-      ),
-    );
-    bytes.addAll(generator.hr());
-    final gstPercentage = subtotal > 0 ? tax * 100 / subtotal : 0.0;
-    bytes.addAll(
-      generator.imageRaster(
-        _gstTableImage(
-          paperSize: paperSize,
-          percentage: gstPercentage,
-          grandTotal: total,
-          gstAmount: tax,
-        ),
-        align: PosAlign.center,
-      ),
-    );
-    bytes.addAll(generator.hr());
     bytes.addAll(
       generator.text(
         'THANK YOU VISIT AGAIN',
@@ -350,7 +437,7 @@ class ReceiptPrinterService {
         ),
       ),
     );
-    bytes.addAll(generator.feed(3));
+    bytes.addAll(generator.feed(endFeedLines));
     return bytes;
   }
 
@@ -625,6 +712,8 @@ class ReceiptPrinterService {
     required String amount,
     required PosStyles productNameStyle,
     bool isHeader = false,
+    bool showRate = true,
+    bool showAmount = true,
   }) {
     const valueStyle = PosStyles(
       fontType: PosFontType.fontA,
@@ -632,8 +721,16 @@ class ReceiptPrinterService {
       align: PosAlign.right,
     );
     return [
-      PosColumn(text: productName, width: 2, styles: productNameStyle),
-      PosColumn(text: rate, width: 3, styles: valueStyle),
+      PosColumn(
+        text: productName,
+        width: showRate
+            ? 2
+            : showAmount
+            ? 4
+            : 7,
+        styles: productNameStyle,
+      ),
+      if (showRate) PosColumn(text: rate, width: 3, styles: valueStyle),
       PosColumn(
         text: unit,
         width: 3,
@@ -645,7 +742,11 @@ class ReceiptPrinterService {
       ),
       PosColumn(
         text: quantity,
-        width: 1,
+        width: showRate
+            ? 1
+            : showAmount
+            ? 2
+            : 2,
         styles: isHeader
             ? const PosStyles(
                 fontType: PosFontType.fontB,
@@ -654,7 +755,7 @@ class ReceiptPrinterService {
               )
             : valueStyle,
       ),
-      PosColumn(text: amount, width: 3, styles: valueStyle),
+      if (showAmount) PosColumn(text: amount, width: 3, styles: valueStyle),
     ];
   }
 
@@ -677,8 +778,20 @@ class ReceiptPrinterService {
   List<String> _wrapParticulars(
     String text, {
     required ReceiptPaperSize paperSize,
+    bool showRate = true,
+    bool showAmount = true,
   }) {
-    final width = paperSize == ReceiptPaperSize.mm58 ? 5 : 15;
+    final width = paperSize == ReceiptPaperSize.mm58
+        ? showRate
+              ? 5
+              : showAmount
+              ? 10
+              : 16
+        : showRate
+        ? 15
+        : showAmount
+        ? 24
+        : 32;
     return _wrapText(text, width);
   }
 

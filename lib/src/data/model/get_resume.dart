@@ -125,6 +125,8 @@ class ResumedProduct {
   });
 
   factory ResumedProduct.fromJson(Map<String, dynamic> json) {
+    final rawQty = json['qty'];
+    final rawQuantity = json['quantity'];
     return ResumedProduct(
       id: _toInt(json['id']),
       productId: _toInt(json['product_id']),
@@ -135,10 +137,13 @@ class ResumedProduct {
       variantCode: json['variant_code']?.toString(),
       mrp: _toDouble(json['mrp']),
       price: _toDouble(json['price']),
-      qty: _toInt(json['qty']),
-      quantity: _toInt(json['quantity']),
+      qty: _toQuantity(rawQty),
+      quantity: _toQuantity(rawQuantity),
       unitValue: _toDouble(json['unit_value']),
-      unit: json['unit']?.toString(),
+      unit:
+          json['unit']?.toString() ??
+          _quantityUnit(rawQty) ??
+          _quantityUnit(rawQuantity),
       tax: _toDouble(json['tax']),
       rowTotal: _toDouble(json['row_total']),
     );
@@ -153,8 +158,8 @@ class ResumedProduct {
   final String? variantCode;
   final double? mrp;
   final double? price;
-  final int? qty;
-  final int? quantity;
+  final num? qty;
+  final num? quantity;
   final double? unitValue;
   final String? unit;
   final double? tax;
@@ -169,6 +174,22 @@ int? _toInt(Object? value) {
 double? _toDouble(Object? value) {
   if (value is num) return value.toDouble();
   return double.tryParse(value?.toString() ?? '');
+}
+
+num? _toQuantity(Object? value) {
+  if (value is num) return value;
+  final match = RegExp(
+    r'^\s*(\d+(?:\.\d+)?)',
+  ).firstMatch(value?.toString() ?? '');
+  if (match == null) return null;
+  return num.tryParse(match.group(1)!);
+}
+
+String? _quantityUnit(Object? value) {
+  final match = RegExp(
+    r'^\s*\d+(?:\.\d+)?\s*([a-zA-Z]+)',
+  ).firstMatch(value?.toString() ?? '');
+  return match?.group(1);
 }
 
 bool? _toBool(Object? value) {

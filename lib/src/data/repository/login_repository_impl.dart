@@ -1,14 +1,22 @@
+import 'dart:async';
+
 import 'package:pick_my_snacks/src/core/const/api_routes.dart';
 import 'package:pick_my_snacks/src/core/services/api_services.dart';
+import 'package:pick_my_snacks/src/core/services/fcm_token_service.dart';
 import 'package:pick_my_snacks/src/core/services/local_storage.dart';
 import 'package:pick_my_snacks/src/data/model/post_login.dart';
 import 'package:pick_my_snacks/src/domain/repository/login_repository.dart';
 
 class LoginRepositoryImpl implements LoginRepository {
-  const LoginRepositoryImpl(this._apiService, this._storage);
+  const LoginRepositoryImpl(
+    this._apiService,
+    this._storage, [
+    this._fcmTokenService,
+  ]);
 
   final ApiService _apiService;
   final LocalStorageService _storage;
+  final FcmTokenService? _fcmTokenService;
 
   @override
   Future<LoginResponse> login({
@@ -24,6 +32,7 @@ class LoginRepositoryImpl implements LoginRepository {
 
     if (response.status == true && token != null && token.isNotEmpty) {
       await _storage.setString(LocalStorageService.authTokenKey, token);
+      unawaited(_fcmTokenService?.syncToken());
     }
 
     return response;
