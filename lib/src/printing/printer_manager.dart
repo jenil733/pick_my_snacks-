@@ -50,11 +50,13 @@ class DuplicatePrintJob {
     required this.items,
     required this.orderNumber,
     this.paperSize = ReceiptPaperSize.mm58,
+    this.staffName,
   });
 
   final List<CartItem> items;
   final String orderNumber;
   final ReceiptPaperSize paperSize;
+  final String? staffName;
 }
 
 class PrinterManager {
@@ -142,6 +144,7 @@ class PrinterManager {
         items: job.items,
         orderNumber: job.orderNumber,
         paperSize: job.paperSize,
+        staffName: job.staffName,
       );
       await _printerService.writeBytes(bytes, documentName: 'duplicate bill');
     });

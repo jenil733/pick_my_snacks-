@@ -567,13 +567,12 @@ Future<void> printDuplicateBill(
 ) async {
   final hasCustomerDetails = await _requireCustomerDetails(context, controller);
   if (!hasCustomerDetails || !context.mounted) return;
+  final staffController = Get.isRegistered<StaffController>()
+      ? Get.find<StaffController>()
+      : null;
+  final staff = staffController?.selectedStaff.value;
   if (controller.savedOrderNumber.value == null) {
-    final staffController = Get.isRegistered<StaffController>()
-        ? Get.find<StaffController>()
-        : null;
-    final orderSaved = await controller.saveOrder(
-      staffId: staffController?.selectedStaff.value?.id,
-    );
+    final orderSaved = await controller.saveOrder(staffId: staff?.id);
     if (!context.mounted) return;
     if (!orderSaved) {
       _showPrinterToast(
@@ -591,6 +590,7 @@ Future<void> printDuplicateBill(
         DuplicatePrintJob(
           items: controller.cart.map((item) => item.copy()).toList(),
           orderNumber: controller.savedOrderNumber.value ?? '',
+          staffName: staff?.name,
         ),
       );
       if (!context.mounted) return;
@@ -603,6 +603,7 @@ Future<void> printDuplicateBill(
       items: controller.cart.map((item) => item.copy()).toList(),
       orderNumber: controller.savedOrderNumber.value ?? '',
       paperSize: ReceiptPaperSize.mm58,
+      staffName: staff?.name,
     );
     if (!context.mounted) return;
     AppToast.show(context, 'Duplicate bill sent to the printer.');
@@ -691,7 +692,10 @@ Future<void> printReceipt(
         }
       } catch (_) {
         if (context.mounted) {
-          _showPrinterToast(context, 'Billing printer is offline. Bill closed.');
+          _showPrinterToast(
+            context,
+            'Billing printer is offline. Bill closed.',
+          );
         }
       }
       if (isKotFlow) {
@@ -702,7 +706,11 @@ Future<void> printReceipt(
       return;
     }
 
-    if (await _ensurePrinterReady(context, printerService, showDialogIfDisconnected: false)) {
+    if (await _ensurePrinterReady(
+      context,
+      printerService,
+      showDialogIfDisconnected: false,
+    )) {
       if (context.mounted) {
         try {
           await printerService.printBluetoothReceipt(
@@ -883,13 +891,8 @@ Future<bool> printTakeAwayBill(
     return false;
   }
 
-
-
   if (!Get.isRegistered<PrinterManager>()) {
-    _showPrinterToast(
-      context,
-      '${role.label} Printer is not configured.',
-    );
+    _showPrinterToast(context, '${role.label} Printer is not configured.');
     return true;
   }
 
@@ -935,7 +938,10 @@ Future<bool> printTakeAwayBill(
   } catch (_) {
     if (!context.mounted) return false;
     AppToast.dismiss();
-    _showPrinterToast(context, '${role.label} Printer is unavailable. Bill completed.');
+    _showPrinterToast(
+      context,
+      '${role.label} Printer is unavailable. Bill completed.',
+    );
     return true;
   }
 }
@@ -957,7 +963,7 @@ Future<bool> _requireCustomerDetails(
   }
   if (!isRequired &&
       (controller.takeAwayCustomerName.value.trim().isNotEmpty ||
-       controller.takeAwayCustomerPhone.value.trim().isNotEmpty)) {
+          controller.takeAwayCustomerPhone.value.trim().isNotEmpty)) {
     controller.isCustomerDetailsPrompted.value = true;
     return true;
   }
@@ -1044,7 +1050,9 @@ class _TakeAwayCustomerDialogState extends State<_TakeAwayCustomerDialog> {
               },
               textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
-                labelText: widget.isRequired ? 'Customer name *' : 'Customer name',
+                labelText: widget.isRequired
+                    ? 'Customer name *'
+                    : 'Customer name',
                 border: const OutlineInputBorder(),
                 errorText: _nameError ? 'Customer name is required.' : null,
               ),
@@ -1059,7 +1067,9 @@ class _TakeAwayCustomerDialogState extends State<_TakeAwayCustomerDialog> {
               },
               keyboardType: TextInputType.phone,
               decoration: InputDecoration(
-                labelText: widget.isRequired ? 'Phone number *' : 'Phone number',
+                labelText: widget.isRequired
+                    ? 'Phone number *'
+                    : 'Phone number',
                 border: const OutlineInputBorder(),
                 errorText: _phoneError ? 'Phone number is required.' : null,
               ),
@@ -1115,13 +1125,9 @@ Future<void> completeTakeAway(
     );
     return;
   }
-  
-  await printTakeAwayBill(
-    context,
-    controller,
-    role: PrinterRole.takeAway,
-  );
-  
+
+  await printTakeAwayBill(context, controller, role: PrinterRole.takeAway);
+
   if (context.mounted) {
     controller.startNewBill();
   }

@@ -190,6 +190,7 @@ class ReceiptPrinterService {
     required List<CartItem> items,
     required String orderNumber,
     required ReceiptPaperSize paperSize,
+    String? staffName,
   }) async {
     if (!await isConnected) {
       throw const ReceiptPrinterException('The printer is not connected.');
@@ -199,6 +200,7 @@ class ReceiptPrinterService {
       items: items,
       orderNumber: orderNumber,
       paperSize: paperSize,
+      staffName: staffName,
     );
     final printed = await PrintBluetoothThermal.writeBytes(
       bytes,
@@ -445,6 +447,7 @@ class ReceiptPrinterService {
     required List<CartItem> items,
     required String orderNumber,
     required ReceiptPaperSize paperSize,
+    String? staffName,
   }) async {
     final profile = await CapabilityProfile.load();
     final printerPaperSize = paperSize == ReceiptPaperSize.mm58
@@ -515,6 +518,15 @@ class ReceiptPrinterService {
         styles: const PosStyles(fontType: PosFontType.fontA, bold: true),
       ),
     );
+    final normalizedStaffName = staffName?.trim();
+    if (normalizedStaffName != null && normalizedStaffName.isNotEmpty) {
+      bytes.addAll(
+        generator.text(
+          'Staff: $normalizedStaffName',
+          styles: const PosStyles(fontType: PosFontType.fontA, bold: true),
+        ),
+      );
+    }
     bytes.addAll(generator.text(divider, styles: clearStyle));
     bytes.addAll(
       tableGenerator.row(

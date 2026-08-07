@@ -781,6 +781,7 @@ void main() {
       items: controller.cart,
       orderNumber: 'ORD19711',
       paperSize: ReceiptPaperSize.mm58,
+      staffName: 'Sam',
     );
     final billText = String.fromCharCodes(bytes);
 
@@ -788,6 +789,7 @@ void main() {
     expect(billText, isNot(contains('GSTIN')));
     expect(billText, contains('CELL:7339595793'));
     expect(billText, contains('Bill No: ORD19711'));
+    expect(billText, contains('Staff: Sam'));
     expect(billText, contains('Product'));
     expect(billText, contains('Qty'));
     expect(billText, contains('Unit'));
