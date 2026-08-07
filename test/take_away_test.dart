@@ -503,6 +503,11 @@ void main() {
     final controller = HomeController(null, SaveOrderUseCase(repository))
       ..onInit()
       ..selectFlow(PosFlow.takeAway);
+    controller.cart.assignAll([
+      CartItem(product: controller.products[0], quantity: 2),
+      CartItem(product: controller.products[2]),
+      CartItem(product: controller.products[4]),
+    ]);
 
     await tester.pumpWidget(
       MaterialApp(

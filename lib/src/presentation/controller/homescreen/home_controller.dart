@@ -460,12 +460,36 @@ class HomeController extends GetxController {
   }
 
   void selectFlow(PosFlow value) {
-    if (flow.value == PosFlow.kot && value == PosFlow.kot) {
-      showKotTables();
+    final currentFlow = flow.value;
+    if (currentFlow == value) {
+      if (value == PosFlow.kot) {
+        showKotTables();
+      }
       return;
     }
-    if (value == PosFlow.kot) {
+
+    if (currentFlow == PosFlow.kot) {
+      // Keep a KOT draft with its table, but never expose that table's cart in
+      // Billing or Take Away.
+      _syncActiveTableOrder();
+      final tableNumber = activeTableNumber.value;
+      if (tableNumber != null && tableOrders[tableNumber]?.itemCount == 0) {
+        tableOrders.remove(tableNumber);
+        submittedKitchenTables.remove(tableNumber);
+        _kitchenSentQuantities.remove(tableNumber);
+      }
+      activeTableNumber.value = null;
+      selectedKotTableNumber.value = null;
+      processingOrder.value = null;
       kotStage.value = KotStage.tables;
+    }
+
+    // Each POS flow owns a separate bill. Starting another flow must not carry
+    // products, customer details, discounts, or totals from the previous one.
+    startNewBill();
+
+    if (value == PosFlow.kot) {
+      showKotTables();
       if (_getTablesUseCase != null &&
           tables.isEmpty &&
           !isLoadingTables.value) {
