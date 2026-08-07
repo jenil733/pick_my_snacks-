@@ -5,22 +5,25 @@ import 'package:pick_my_snacks/src/core/utils/helper/app_toast.dart';
 import 'package:pick_my_snacks/src/core/utils/helper/texthelper.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
+import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_adjustment_dialogs.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/common_widgets.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/payment_method_dropdown.dart';
 import 'package:pick_my_snacks/src/services/receipt_printer_service.dart';
 
 class BillSummaryPanel extends StatelessWidget {
-  const BillSummaryPanel({required this.controller, this.onNewBill, super.key});
+  const BillSummaryPanel({required this.controller, super.key});
 
   final HomeController controller;
-  final VoidCallback? onNewBill;
 
   @override
   Widget build(BuildContext context) {
     return DashboardPanel(
       child: Column(
         children: [
-          const SectionHeader(title: 'Bill Summary'),
+          SectionHeader(
+            title: 'Bill Summary',
+            trailing: BillAdjustmentButtons(controller: controller),
+          ),
           const Divider(height: 1),
           Expanded(
             child: Obx(
@@ -62,50 +65,51 @@ class BillSummaryPanel extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: Column(
                 children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.tonalIcon(
-                      onPressed:
-                          controller.isSavingOrder.value ||
-                              controller.isHoldingOrder.value
-                          ? null
-                          : () =>
-                                startNewBill(controller, onStarted: onNewBill),
-                      icon: const Icon(Icons.note_add_outlined, size: 19),
-                      label: const Text('New Bill'),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(50),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(9),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              controller.cart.isEmpty ||
+                                  controller.isHoldingOrder.value
+                              ? null
+                              : () => holdBill(context, controller),
+                          icon: const Icon(
+                            Icons.pause_circle_outline_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            controller.isHoldingOrder.value
+                                ? 'Holding...'
+                                : 'Hold Bill',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(50),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed:
-                          controller.cart.isEmpty ||
-                              controller.isHoldingOrder.value
-                          ? null
-                          : () => holdBill(context, controller),
-                      icon: const Icon(
-                        Icons.pause_circle_outline_rounded,
-                        size: 18,
-                      ),
-                      label: Text(
-                        controller.isHoldingOrder.value
-                            ? 'Holding Order...'
-                            : 'Hold Bill',
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(50),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(9),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              controller.cart.isEmpty ||
+                                  controller.isSavingOrder.value
+                              ? null
+                              : () => printDuplicateBill(context, controller),
+                          icon: const Icon(Icons.copy_all_rounded, size: 18),
+                          label: const Text('Copy Bill'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(50),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -173,16 +177,19 @@ class BillSummaryPanel extends StatelessWidget {
             label: 'Items (${controller.cart.length})',
             value: money(controller.subtotal),
           ),
-          _summaryRow(
-            label: 'Discount',
-            value: money(0),
-            trailing: const Icon(
-              Icons.edit_outlined,
-              size: 15,
-              color: AppColors.textSecondary,
+          if (controller.discountType.value != 'none')
+            _summaryRow(
+              label: 'Discount',
+              value: '- ${money(controller.discountAmount)}',
+              valueColor: AppColors.success,
             ),
-          ),
           _summaryRow(label: 'GST', value: money(controller.tax)),
+          if (controller.chargeAmount.value > 0)
+            _summaryRow(
+              label: 'Charge',
+              value: '+ ${money(controller.chargeAmount.value)}',
+              valueColor: AppColors.warning,
+            ),
         ],
       ),
     );
@@ -192,6 +199,7 @@ class BillSummaryPanel extends StatelessWidget {
     required String label,
     required String value,
     Widget? trailing,
+    Color? valueColor,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -200,7 +208,10 @@ class BillSummaryPanel extends StatelessWidget {
           Text(label, style: TextHelper.body),
           if (trailing != null) ...[const SizedBox(width: 6), trailing],
           const Spacer(),
-          Text(value, style: TextHelper.bodySemiBold),
+          Text(
+            value,
+            style: TextHelper.bodySemiBold.copyWith(color: valueColor),
+          ),
         ],
       ),
     );
@@ -231,22 +242,15 @@ class BillSummaryPanel extends StatelessWidget {
           Expanded(
             child: Text(
               '${item.product.name} ${item.displayUnit}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 3,
               style: TextHelper.captionText,
             ),
           ),
+          const SizedBox(width: 6),
+          BillQuantityControl(controller: controller, item: item),
+          const SizedBox(width: 8),
           SizedBox(
-            width: 34,
-            child: Text(
-              '×${item.quantity}',
-              textAlign: TextAlign.center,
-              style: TextHelper.captionText,
-            ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 66,
+            width: 62,
             child: Text(
               money(item.total),
               textAlign: TextAlign.right,
@@ -259,9 +263,65 @@ class BillSummaryPanel extends StatelessWidget {
   }
 }
 
-void startNewBill(HomeController controller, {VoidCallback? onStarted}) {
-  controller.startNewBill();
-  onStarted?.call();
+class BillQuantityControl extends StatelessWidget {
+  const BillQuantityControl({
+    required this.controller,
+    required this.item,
+    super.key,
+  });
+
+  final HomeController controller;
+  final CartItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _button(
+            tooltip: 'Decrease ${item.product.name}',
+            icon: Icons.remove_rounded,
+            onPressed: () => controller.decrement(item),
+          ),
+          SizedBox(
+            width: 24,
+            child: Text(
+              '${item.quantity}',
+              textAlign: TextAlign.center,
+              style: TextHelper.bodySemiBold,
+            ),
+          ),
+          _button(
+            tooltip: 'Increase ${item.product.name}',
+            icon: Icons.add_rounded,
+            onPressed: () => controller.increment(item),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _button({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 27, height: 28),
+      icon: Icon(icon, size: 16),
+    );
+  }
 }
 
 Future<void> holdBill(BuildContext context, HomeController controller) async {
@@ -281,6 +341,49 @@ Future<void> holdBill(BuildContext context, HomeController controller) async {
     return;
   }
   AppToast.show(context, 'Bill #${bill.id} held successfully.');
+}
+
+Future<void> printDuplicateBill(
+  BuildContext context,
+  HomeController controller,
+) async {
+  if (controller.savedOrderNumber.value == null) {
+    final staffController = Get.isRegistered<StaffController>()
+        ? Get.find<StaffController>()
+        : null;
+    final orderSaved = await controller.saveOrder(
+      staffId: staffController?.selectedStaff.value?.id,
+    );
+    if (!context.mounted) return;
+    if (!orderSaved) {
+      _showPrinterToast(
+        context,
+        controller.saveOrderError.value ?? 'Unable to save the order.',
+      );
+      return;
+    }
+  }
+
+  final printerService = ReceiptPrinterService();
+  try {
+    if (!await _ensurePrinterReady(context, printerService)) return;
+    if (!context.mounted) return;
+    await printerService.printBluetoothDuplicateBill(
+      items: controller.cart.map((item) => item.copy()).toList(),
+      orderNumber: controller.savedOrderNumber.value ?? '',
+      paperSize: ReceiptPaperSize.mm58,
+    );
+    if (!context.mounted) return;
+    AppToast.show(context, 'Duplicate bill sent to the printer.');
+  } on ReceiptPrinterException catch (error) {
+    if (!context.mounted) return;
+    AppToast.dismiss();
+    _showPrinterToast(context, error.message);
+  } catch (_) {
+    if (!context.mounted) return;
+    AppToast.dismiss();
+    _showPrinterToast(context, 'The printer is not connected.');
+  }
 }
 
 Future<void> printReceipt(
@@ -304,31 +407,22 @@ Future<void> printReceipt(
   final items = controller.cart.map((item) => item.copy()).toList();
   final subtotal = controller.subtotal;
   final tax = controller.tax;
+  final discount = controller.discountAmount;
+  final charge = controller.chargeAmount.value;
   final total = controller.total;
   final printerService = ReceiptPrinterService();
 
   try {
-    // The Android plugin does not complete connectionStatus when permission is
-    // denied, so permission must always be checked before connection status.
-    final hasPermission = await printerService.isBluetoothPermissionGranted;
-    final needsConnection = !hasPermission || !await printerService.isConnected;
-    AppToast.dismiss();
-    if (needsConnection) {
-      if (!context.mounted) return;
-      final connected = await showDialog<bool>(
-        context: context,
-        builder: (_) =>
-            _PrinterConnectionDialog(printerService: printerService),
-      );
-      if (connected != true) return;
-    }
-
+    if (!await _ensurePrinterReady(context, printerService)) return;
     if (!context.mounted) return;
     await printerService.printBluetoothReceipt(
       items: items,
       subtotal: subtotal,
       tax: tax,
+      discount: discount,
+      charge: charge,
       total: total,
+      paymentMethod: controller.paymentMethod.value,
       orderNumber: controller.savedOrderNumber.value ?? '',
       paperSize: ReceiptPaperSize.mm58,
     );
@@ -343,6 +437,25 @@ Future<void> printReceipt(
     AppToast.dismiss();
     _showPrinterToast(context, 'The printer is not connected.');
   }
+}
+
+Future<bool> _ensurePrinterReady(
+  BuildContext context,
+  ReceiptPrinterService printerService,
+) async {
+  // The Android plugin does not complete connectionStatus when permission is
+  // denied, so permission must always be checked before connection status.
+  final hasPermission = await printerService.isBluetoothPermissionGranted;
+  final needsConnection = !hasPermission || !await printerService.isConnected;
+  AppToast.dismiss();
+  if (!needsConnection) return true;
+  if (!context.mounted) return false;
+
+  final connected = await showDialog<bool>(
+    context: context,
+    builder: (_) => _PrinterConnectionDialog(printerService: printerService),
+  );
+  return connected == true;
 }
 
 void _showPrinterToast(BuildContext context, String message) {

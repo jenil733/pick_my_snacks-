@@ -14,16 +14,6 @@ rootProject.layout.buildDirectory.value(newBuildDir)
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
-
-    // The USB thermal-printer plugin still declares compileSdk 31. Override
-    // library plugins so they compile against the same current SDK as the app.
-    afterEvaluate {
-        if (plugins.hasPlugin("com.android.library")) {
-            extensions.configure<com.android.build.api.dsl.LibraryExtension> {
-                compileSdk = 36
-            }
-        }
-    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

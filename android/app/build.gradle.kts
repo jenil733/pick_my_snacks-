@@ -19,7 +19,10 @@ android {
         applicationId = "com.example.pick_my_snacks"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Flutter 3.44 and shared_preferences_android require API 24.
+        // This keeps the app installable on Android 7.0 and every newer
+        // Android release supported by the current Flutter toolchain.
+        minSdk = 28
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

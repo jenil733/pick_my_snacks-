@@ -133,7 +133,7 @@ class _ProductQrScannerScreenState extends State<_ProductQrScannerScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Place the 9-digit product QR inside the frame',
+                      'Scan a 9-digit weight QR or the product QR code',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white),
                     ),

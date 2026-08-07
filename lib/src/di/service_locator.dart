@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:pick_my_snacks/src/core/services/api_services.dart';
 import 'package:pick_my_snacks/src/core/services/local_storage.dart';
+import 'package:pick_my_snacks/src/core/utils/navigation/approutes.dart';
 import 'package:pick_my_snacks/src/data/repository/product_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/delete_held_bill_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/resume_order_repository_impl.dart';
@@ -29,10 +30,13 @@ import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_contr
 import 'package:pick_my_snacks/src/presentation/controller/login/login_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
 
-Future<void> setupServiceLocator() async {
+Future<String> setupServiceLocator() async {
+  late final LocalStorageService storage;
   if (!Get.isRegistered<LocalStorageService>()) {
-    final storage = await LocalStorageService.initialize();
+    storage = await LocalStorageService.initialize();
     Get.put<LocalStorageService>(storage, permanent: true);
+  } else {
+    storage = Get.find<LocalStorageService>();
   }
 
   if (!Get.isRegistered<ApiService>()) {
@@ -180,10 +184,17 @@ Future<void> setupServiceLocator() async {
 
   if (!Get.isRegistered<StaffController>()) {
     Get.lazyPut<StaffController>(
-      () => StaffController(Get.find<GetStaffUseCase>()),
+      () => StaffController(
+        Get.find<GetStaffUseCase>(),
+        Get.find<LocalStorageService>(),
+      ),
       fenix: true,
     );
   }
+
+  return storage.hasAuthenticatedSession
+      ? AppRoutes.homescreen
+      : AppRoutes.login;
 }
 
 T locate<T>() => Get.find<T>();

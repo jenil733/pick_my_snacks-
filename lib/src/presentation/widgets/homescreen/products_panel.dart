@@ -116,6 +116,15 @@ class ProductsPanel extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextHelper.bodySemiBold,
                               ),
+                              if (product.productId.trim().isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Code: ${product.productId.trim()}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextHelper.poppins,
+                                ),
+                              ],
                               const SizedBox(height: 3),
                               Text(
                                 money(product.price),
@@ -124,10 +133,58 @@ class ProductsPanel extends StatelessWidget {
                             ],
                           ),
                         ),
-                        SoftIconButton(
-                          icon: Icons.add,
-                          onTap: () => controller.addProduct(product),
-                        ),
+                        Obx(() {
+                          final hasCartItems = controller.cart.isNotEmpty;
+                          final isAdded =
+                              hasCartItems &&
+                              controller.cart.any(
+                                (item) => item.product.id == product.id,
+                              );
+                          return isAdded
+                              ? Container(
+                                  key: ValueKey('product-added-${product.id}'),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 7,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.success.withValues(
+                                      alpha: .10,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: AppColors.success.withValues(
+                                        alpha: .35,
+                                      ),
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.check_rounded,
+                                        color: AppColors.success,
+                                        size: 15,
+                                      ),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'Added',
+                                        style: TextStyle(
+                                          color: AppColors.success,
+                                          fontFamily: 'Poppins',
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : SoftIconButton(
+                                  key: ValueKey('product-add-${product.id}'),
+                                  icon: Icons.add,
+                                  onTap: () => controller.addProduct(product),
+                                );
+                        }),
                       ],
                     ),
                   );

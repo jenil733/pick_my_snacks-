@@ -6,10 +6,20 @@ class HoldOrderRequest {
     required this.paymentMode,
     required this.products,
     this.discountType = 'none',
+    this.discountValue = 0,
+    this.offer = '',
+    this.discountReason = '',
+    this.charge = 0,
+    this.chargeReason = '',
   });
 
   final int staffId;
   final String discountType;
+  final double discountValue;
+  final String offer;
+  final String discountReason;
+  final double charge;
+  final String chargeReason;
   final String paymentMode;
   final List<SaveOrderProductRequest> products;
 
@@ -19,6 +29,20 @@ class HoldOrderRequest {
       'discount_type': discountType,
       'payment_mode': paymentMode,
     };
+
+    if (discountType != 'none') {
+      fields['discount_value'] = discountValue;
+      if (offer.trim().isNotEmpty) fields['offer'] = offer.trim();
+      if (discountReason.trim().isNotEmpty) {
+        fields['discount_reason'] = discountReason.trim();
+      }
+    }
+    if (charge > 0) {
+      fields['charge'] = charge;
+      if (chargeReason.trim().isNotEmpty) {
+        fields['charge_reason'] = chargeReason.trim();
+      }
+    }
 
     for (var index = 0; index < products.length; index++) {
       final product = products[index];

@@ -112,7 +112,10 @@ class ReceiptPrinterService {
     required List<CartItem> items,
     required double subtotal,
     required double tax,
+    double discount = 0,
+    double charge = 0,
     required double total,
+    required String paymentMethod,
     required String orderNumber,
     required ReceiptPaperSize paperSize,
   }) async {
@@ -124,7 +127,10 @@ class ReceiptPrinterService {
       items: items,
       subtotal: subtotal,
       tax: tax,
+      discount: discount,
+      charge: charge,
       total: total,
+      paymentMethod: paymentMethod,
       orderNumber: orderNumber,
       paperSize: paperSize,
     );
@@ -138,11 +144,39 @@ class ReceiptPrinterService {
     }
   }
 
+  Future<void> printBluetoothDuplicateBill({
+    required List<CartItem> items,
+    required String orderNumber,
+    required ReceiptPaperSize paperSize,
+  }) async {
+    if (!await isConnected) {
+      throw const ReceiptPrinterException('The printer is not connected.');
+    }
+
+    final bytes = await buildDuplicateBillBytes(
+      items: items,
+      orderNumber: orderNumber,
+      paperSize: paperSize,
+    );
+    final printed = await PrintBluetoothThermal.writeBytes(
+      bytes,
+    ).timeout(_printTimeout, onTimeout: () => false);
+    if (!printed) {
+      throw const ReceiptPrinterException(
+        'The printer did not accept the duplicate bill. '
+        'Please reconnect and retry.',
+      );
+    }
+  }
+
   Future<List<int>> buildReceiptBytes({
     required List<CartItem> items,
     required double subtotal,
     required double tax,
+    double discount = 0,
+    double charge = 0,
     required double total,
+    required String paymentMethod,
     required String orderNumber,
     required ReceiptPaperSize paperSize,
   }) async {
@@ -238,8 +272,8 @@ class ReceiptPrinterService {
       final useCompactProductName = wrappedProductName.length >= 3;
       final compactNameWidth = paperSize == ReceiptPaperSize.mm58 ? 6 : 20;
       final productNameLines = useCompactProductName
-          ? _chunkText(productName, compactNameWidth).take(2).toList()
-          : wrappedProductName.take(2).toList();
+          ? _chunkText(productName, compactNameWidth)
+          : wrappedProductName;
       final productNameStyle = useCompactProductName
           ? compactProductNameStyle
           : tableStyle;
@@ -270,22 +304,39 @@ class ReceiptPrinterService {
       ),
     );
     bytes.addAll(generator.hr());
-    bytes.addAll(
-      generator.text(
-        _moneyLine('Subtotal', subtotal, charactersPerLine),
-        styles: receiptStyle,
-      ),
-    );
-    bytes.addAll(
-      generator.text(
-        _moneyLine('GST', tax, charactersPerLine),
-        styles: receiptStyle,
-      ),
-    );
+    if (discount > 0) {
+      bytes.addAll(
+        generator.text(
+          _moneyLine('Discount', -discount, charactersPerLine),
+          styles: receiptStyle,
+        ),
+      );
+    }
+    if (charge > 0) {
+      bytes.addAll(
+        generator.text(
+          _moneyLine('Charge', charge, charactersPerLine),
+          styles: receiptStyle,
+        ),
+      );
+    }
     bytes.addAll(
       generator.text(
         _moneyLine('Grand Total', total, charactersPerLine),
         styles: const PosStyles(fontType: PosFontType.fontA, bold: true),
+      ),
+    );
+    bytes.addAll(generator.hr());
+    final gstPercentage = subtotal > 0 ? tax * 100 / subtotal : 0.0;
+    bytes.addAll(
+      generator.imageRaster(
+        _gstTableImage(
+          paperSize: paperSize,
+          percentage: gstPercentage,
+          grandTotal: total,
+          gstAmount: tax,
+        ),
+        align: PosAlign.center,
       ),
     );
     bytes.addAll(generator.hr());
@@ -295,6 +346,144 @@ class ReceiptPrinterService {
         styles: const PosStyles(
           align: PosAlign.center,
           fontType: PosFontType.fontB,
+          bold: true,
+        ),
+      ),
+    );
+    bytes.addAll(generator.feed(3));
+    return bytes;
+  }
+
+  Future<List<int>> buildDuplicateBillBytes({
+    required List<CartItem> items,
+    required String orderNumber,
+    required ReceiptPaperSize paperSize,
+  }) async {
+    final profile = await CapabilityProfile.load();
+    final printerPaperSize = paperSize == ReceiptPaperSize.mm58
+        ? PaperSize.mm58
+        : PaperSize.mm80;
+    final generator = Generator(printerPaperSize, profile);
+    final tableGenerator = Generator(
+      printerPaperSize,
+      profile,
+      spaceBetweenRows: 0,
+    );
+    final now = DateTime.now();
+    final date =
+        '${_twoDigits(now.month)}/${_twoDigits(now.day)}/${now.year} '
+        '${_twelveHour(now.hour)}:${_twoDigits(now.minute)} '
+        '${now.hour >= 12 ? 'PM' : 'AM'}';
+    final logo = await _receiptLogo(paperSize);
+    final itemCount = items.fold(0, (sum, item) => sum + item.quantity);
+    final divider = paperSize == ReceiptPaperSize.mm58
+        ? '--------------------------------'
+        : '------------------------------------------------';
+    const clearStyle = PosStyles(fontType: PosFontType.fontA, bold: true);
+    final bytes = <int>[];
+
+    bytes.addAll(generator.reset());
+    bytes.addAll(generator.imageRaster(logo, align: PosAlign.center));
+    bytes.addAll(generator.feed(1));
+    bytes.addAll(
+      generator.text(
+        'Vettturnimadam, Nagercoil - 629001',
+        styles: const PosStyles(
+          align: PosAlign.center,
+          fontType: PosFontType.fontB,
+          bold: true,
+        ),
+      ),
+    );
+    bytes.addAll(
+      generator.text(
+        'CELL:7339595793',
+        styles: const PosStyles(
+          align: PosAlign.center,
+          fontType: PosFontType.fontB,
+          bold: true,
+        ),
+      ),
+    );
+    bytes.addAll(
+      generator.text(
+        'DUPLICATE',
+        styles: const PosStyles(
+          align: PosAlign.center,
+          fontType: PosFontType.fontA,
+          bold: true,
+        ),
+      ),
+    );
+    bytes.addAll(generator.text(divider, styles: clearStyle));
+    bytes.addAll(
+      generator.text(
+        'Bill No: $orderNumber',
+        styles: const PosStyles(fontType: PosFontType.fontA, bold: true),
+      ),
+    );
+    bytes.addAll(
+      generator.text(
+        'Date $date',
+        styles: const PosStyles(fontType: PosFontType.fontA, bold: true),
+      ),
+    );
+    bytes.addAll(generator.text(divider, styles: clearStyle));
+    bytes.addAll(
+      tableGenerator.row(
+        _duplicateBillColumns(
+          number: '#',
+          product: 'Product',
+          quantity: 'Qty',
+          unit: 'Unit',
+          style: clearStyle,
+        ),
+        multiLine: false,
+      ),
+    );
+    bytes.addAll(generator.text(divider, styles: clearStyle));
+
+    for (var itemIndex = 0; itemIndex < items.length; itemIndex++) {
+      final item = items[itemIndex];
+      final productLines = _chunkText(
+        item.product.name.toUpperCase(),
+        paperSize == ReceiptPaperSize.mm58 ? 17 : 26,
+      );
+      for (var lineIndex = 0; lineIndex < productLines.length; lineIndex++) {
+        final isFirstLine = lineIndex == 0;
+        bytes.addAll(
+          tableGenerator.row(
+            _duplicateBillColumns(
+              number: isFirstLine ? '${itemIndex + 1}' : '',
+              product: productLines[lineIndex],
+              quantity: isFirstLine ? '${item.quantity}' : '',
+              unit: isFirstLine ? item.displayUnit.toUpperCase() : '',
+              style: clearStyle,
+            ),
+            multiLine: false,
+          ),
+        );
+      }
+    }
+
+    bytes.addAll(generator.text(divider, styles: clearStyle));
+    bytes.addAll(
+      generator.text(
+        _twoColumns(
+          'Total Items:',
+          '$itemCount',
+          paperSize == ReceiptPaperSize.mm58 ? 32 : 48,
+        ),
+        styles: const PosStyles(fontType: PosFontType.fontA, bold: true),
+      ),
+    );
+    bytes.addAll(generator.text(divider, styles: clearStyle));
+    bytes.addAll(
+      generator.text(
+        'THANK YOU VISIT AGAIN',
+        styles: const PosStyles(
+          align: PosAlign.center,
+          fontType: PosFontType.fontA,
           bold: true,
         ),
       ),
@@ -320,6 +509,92 @@ class ReceiptPrinterService {
     // Match the legacy receipt logo: the dark outline prints in black while
     // the yellow lettering and white background remain unprinted.
     return img.luminanceThreshold(resizedLogo, threshold: .50);
+  }
+
+  img.Image _gstTableImage({
+    required ReceiptPaperSize paperSize,
+    required double percentage,
+    required double grandTotal,
+    required double gstAmount,
+  }) {
+    final paperWidth = paperSize == ReceiptPaperSize.mm58 ? 384 : 576;
+    final canvas = img.Image(width: paperWidth, height: 34);
+    img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
+    final textColor = img.ColorRgb8(0, 0, 0);
+
+    const headings = ['GST', 'Amt', 'CGST', 'Amt', 'SGST', 'Amt'];
+    for (var column = 0; column < headings.length; column++) {
+      _drawGstCell(
+        canvas,
+        text: headings[column],
+        column: column,
+        y: 0,
+        color: textColor,
+      );
+    }
+    img.drawLine(
+      canvas,
+      x1: 0,
+      y1: 15,
+      x2: canvas.width - 1,
+      y2: 15,
+      color: textColor,
+    );
+
+    final halfPercentage = percentage / 2;
+    final halfGstAmount = gstAmount / 2;
+    final values = [
+      _percentage(percentage),
+      _amount(grandTotal),
+      _percentage(halfPercentage),
+      _amount(halfGstAmount),
+      _percentage(halfPercentage),
+      _amount(halfGstAmount),
+    ];
+    for (var column = 0; column < values.length; column++) {
+      _drawGstCell(
+        canvas,
+        text: values[column],
+        column: column,
+        y: 18,
+        color: textColor,
+      );
+    }
+    return canvas;
+  }
+
+  void _drawGstCell(
+    img.Image canvas, {
+    required String text,
+    required int column,
+    required int y,
+    required img.Color color,
+  }) {
+    final cellWidth = canvas.width / 6;
+    if (column == 0) {
+      img.drawString(canvas, text, font: img.arial14, x: 4, y: y, color: color);
+      return;
+    }
+    if (column == 5) {
+      img.drawString(
+        canvas,
+        text,
+        font: img.arial14,
+        x: canvas.width - 4,
+        y: y,
+        color: color,
+        rightJustify: true,
+      );
+      return;
+    }
+
+    final textWidth = text.codeUnits.fold<int>(
+      0,
+      (width, character) =>
+          width + (img.arial14.characters[character]?.xAdvance ?? 0),
+    );
+    final x = (column * cellWidth + (cellWidth - textWidth) / 2).round();
+    img.drawString(canvas, text, font: img.arial14, x: x, y: y, color: color);
   }
 
   String _twoColumns(String left, String right, int width) {
@@ -383,6 +658,22 @@ class ReceiptPrinterService {
     ];
   }
 
+  List<PosColumn> _duplicateBillColumns({
+    required String number,
+    required String product,
+    required String quantity,
+    required String unit,
+    required PosStyles style,
+  }) {
+    final centeredStyle = style.copyWith(align: PosAlign.center);
+    return [
+      PosColumn(text: number, width: 1, styles: style),
+      PosColumn(text: product, width: 7, styles: style),
+      PosColumn(text: quantity, width: 2, styles: centeredStyle),
+      PosColumn(text: unit, width: 2, styles: centeredStyle),
+    ];
+  }
+
   List<String> _wrapParticulars(
     String text, {
     required ReceiptPaperSize paperSize,
@@ -432,6 +723,13 @@ class ReceiptPrinterService {
   }
 
   String _amount(double value) => value.toStringAsFixed(2);
+
+  String _percentage(double value) {
+    final rounded = value.roundToDouble();
+    return value == rounded
+        ? '${rounded.toInt()}%'
+        : '${value.toStringAsFixed(2)}%';
+  }
 
   String _fitLeft(String value, int width) {
     final fitted = _clip(value, width);

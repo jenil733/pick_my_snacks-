@@ -25,4 +25,23 @@ void main() {
     expect(fields, isNot(contains('subtotal')));
     expect(fields, isNot(contains('total')));
   });
+
+  test('adds applied discount and charge fields to hold_save_order', () {
+    const request = HoldOrderRequest(
+      staffId: 1,
+      paymentMode: 'card',
+      discountType: 'flat',
+      discountValue: 15,
+      charge: 5,
+      chargeReason: 'Packing',
+      products: [SaveOrderProductRequest(productId: 3, quantity: 1)],
+    );
+
+    final fields = request.toFormFields();
+
+    expect(fields['discount_type'], 'flat');
+    expect(fields['discount_value'], 15);
+    expect(fields['charge'], 5);
+    expect(fields['charge_reason'], 'Packing');
+  });
 }

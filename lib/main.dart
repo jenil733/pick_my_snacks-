@@ -6,8 +6,8 @@ import 'package:pick_my_snacks/src/di/service_locator.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await setupServiceLocator();
-  runApp(const MyApp());
+  final initialRoute = await setupServiceLocator();
+  runApp(MyApp(initialRoute: initialRoute));
 }
 
 class MyApp extends StatelessWidget {
@@ -18,7 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Delivery',
+      title: 'pick my snacks',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

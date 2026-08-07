@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:pick_my_snacks/src/core/const/appcolors.dart';
-import 'package:pick_my_snacks/src/core/utils/helper/texthelper.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_summary_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/cart_panel.dart';
+import 'package:pick_my_snacks/src/presentation/widgets/homescreen/common_widgets.dart';
+import 'package:pick_my_snacks/src/presentation/widgets/homescreen/external_qr_scanner_button.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/held_bills_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/products_panel.dart';
-import 'package:pick_my_snacks/src/presentation/widgets/homescreen/product_qr_scanner.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/staff_menu.dart';
 
 class TabletHomeScreen extends StatefulWidget {
@@ -29,35 +29,44 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
       appBar: AppBar(
         toolbarHeight: 68,
         backgroundColor: AppColors.navy,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         foregroundColor: Colors.white,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Pick My Snacks', style: TextHelper.appBarTitle),
-            Text('Tablet billing', style: TextHelper.appBarSearchHint),
+            PulsingAppLogo(width: 100, height: 50, canvasSize: 140),
+            SizedBox(width: 8),
+            Text(
+              'Tablet billing',
+              style: TextStyle(
+                color: Color(0xFFCBD5E1),
+                fontFamily: 'Poppins',
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
         actions: [
           const StaffMenu(),
           const SizedBox(width: 6),
-          IconButton(
-            tooltip: 'Scan product QR',
-            onPressed: () => showProductQrScanner(
-              context,
-              widget.controller,
-              onProductAdded: () => setState(() => _selectedDetail = 1),
-            ),
-            icon: const Icon(Icons.qr_code_scanner_rounded),
+          ExternalQrScannerButton(
+            controller: widget.controller,
+            onProductAdded: () => setState(() => _selectedDetail = 1),
+            showLabel: true,
           ),
+          const SizedBox(width: 6),
           Obx(
             () => TextButton.icon(
               onPressed: () => showHeldBillsPanel(context, widget.controller),
               icon: Badge(
                 isLabelVisible: widget.controller.heldBillCount > 0,
                 label: Text('${widget.controller.heldBillCount}'),
-                child: const Icon(Icons.pause_circle_outline_rounded),
+                child: const Icon(Icons.pause_circle_filled_rounded, size: 23),
               ),
-              label: const Text('Hold Bills'),
+              label: const Text('Held'),
               style: TextButton.styleFrom(foregroundColor: Colors.white),
             ),
           ),
@@ -110,11 +119,7 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
                         index: _selectedDetail,
                         children: [
                           CartPanel(controller: widget.controller),
-                          BillSummaryPanel(
-                            controller: widget.controller,
-                            onNewBill: () =>
-                                setState(() => _selectedDetail = 0),
-                          ),
+                          BillSummaryPanel(controller: widget.controller),
                         ],
                       ),
                     ),

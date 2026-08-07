@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:pick_my_snacks/src/core/const/appcolors.dart';
+import 'package:pick_my_snacks/src/core/const/appimages.dart';
 import 'package:pick_my_snacks/src/core/utils/helper/texthelper.dart';
 
 class DashboardPanel extends StatelessWidget {
@@ -25,6 +26,74 @@ class DashboardPanel extends StatelessWidget {
         ],
       ),
       child: child,
+    );
+  }
+}
+
+class PulsingAppLogo extends StatefulWidget {
+  const PulsingAppLogo({
+    this.width = 112,
+    this.height = 56,
+    this.canvasSize = 150,
+    super.key,
+  });
+
+  final double width;
+  final double height;
+  final double canvasSize;
+
+  @override
+  State<PulsingAppLogo> createState() => _PulsingAppLogoState();
+}
+
+class _PulsingAppLogoState extends State<PulsingAppLogo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    )..repeat(reverse: true, count: 8);
+    _scale = Tween<double>(
+      begin: .90,
+      end: 1.08,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: ScaleTransition(
+        scale: _scale,
+        child: SizedBox(
+          width: widget.width,
+          height: widget.height,
+          child: ClipRect(
+            child: OverflowBox(
+              minWidth: widget.canvasSize,
+              maxWidth: widget.canvasSize,
+              minHeight: widget.canvasSize,
+              maxHeight: widget.canvasSize,
+              child: Image.asset(
+                AppImages.appIcon,
+                width: widget.canvasSize,
+                height: widget.canvasSize,
+                filterQuality: FilterQuality.high,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:get/get.dart' hide FormData, Response;
 import 'package:pick_my_snacks/src/core/const/api_routes.dart';
 import 'package:pick_my_snacks/src/core/services/local_storage.dart';
 import 'package:pick_my_snacks/src/core/utils/helper/app_toast.dart';
+import 'package:pick_my_snacks/src/core/utils/navigation/approutes.dart';
 
 class ApiService {
   factory ApiService({required LocalStorageService storage, Dio? dio}) {
@@ -15,7 +16,7 @@ class ApiService {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          final token = _storage.getString(authTokenKey);
+          final token = _storage.getString(LocalStorageService.authTokenKey);
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -52,11 +53,11 @@ class ApiService {
     );
   }
 
-  static const authTokenKey = 'auth_token';
+  static const authTokenKey = LocalStorageService.authTokenKey;
 
   final Dio _dio;
   final LocalStorageService _storage;
-  bool _isUnauthorizedHandled = false;
+  String? _lastUnauthorizedToken;
 
   static BaseOptions _baseOptions() {
     final headers = <String, dynamic>{'Accept': Headers.jsonContentType};
@@ -187,11 +188,18 @@ class ApiService {
   }
 
   Future<void> _handleUnauthorized() async {
-    if (_isUnauthorizedHandled) return;
-    _isUnauthorizedHandled = true;
+    final token = _storage.getString(LocalStorageService.authTokenKey) ?? '';
+    if (_lastUnauthorizedToken == token) return;
+    _lastUnauthorizedToken = token;
 
-    await _storage.remove(authTokenKey);
+    await Future.wait([
+      _storage.remove(LocalStorageService.authTokenKey),
+      _storage.remove(LocalStorageService.selectedStaffIdKey),
+    ]);
     _showMessage(title: 'Session expired', message: 'Please log in again.');
+    if (Get.currentRoute != AppRoutes.login) {
+      Get.offAllNamed(AppRoutes.login);
+    }
   }
 
   void _showMessage({required String title, required String message}) {

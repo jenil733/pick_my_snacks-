@@ -116,21 +116,38 @@ class MobileProductsScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(product.unit, style: TextHelper.poppins),
+                                if (product.productId.trim().isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Code: ${product.productId.trim()}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextHelper.poppins,
+                                  ),
+                                ],
                                 const SizedBox(height: 4),
                                 Text(
                                   money(product.price),
-                                  style: TextHelper.primaryBody,
+                                  style: TextHelper.bodySemiBold,
                                 ),
                               ],
                             ),
                           ),
                           const SizedBox(width: 8),
                           quantity == 0
-                              ? IconButton.filled(
-                                  tooltip: 'Add ${product.name}',
-                                  onPressed: () =>
-                                      controller.addProduct(product),
-                                  icon: const Icon(Icons.add_rounded),
+                              ? SizedBox.square(
+                                  dimension: 42,
+                                  child: IconButton.filled(
+                                    tooltip: 'Add ${product.name}',
+                                    onPressed: () =>
+                                        controller.addProduct(product),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.white,
+                                      shape: const CircleBorder(),
+                                    ),
+                                    icon: const Icon(Icons.add_rounded),
+                                  ),
                                 )
                               : _QuantityControl(
                                   key: ValueKey(
@@ -166,6 +183,8 @@ class MobileProductsScreen extends StatelessWidget {
                   child: FilledButton(
                     onPressed: onOpenBill,
                     style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(48),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),

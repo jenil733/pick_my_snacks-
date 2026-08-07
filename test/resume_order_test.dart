@@ -16,6 +16,7 @@ void main() {
         'bill': {
           'id': 11,
           'order_id': 'ORD0011',
+          'subtotal': '250.00',
           'gst': '12.50',
           'total': '262.50',
           'payment_mode': 'cash',
@@ -38,6 +39,7 @@ void main() {
 
     expect(response.status, isTrue);
     expect(response.data!.bill!.orderId, 'ORD0011');
+    expect(response.data!.bill!.subtotal, 250);
     expect(response.data!.bill!.gst, 12.5);
     expect(response.data!.products, hasLength(1));
     expect(response.data!.products!.single.productId, 3);

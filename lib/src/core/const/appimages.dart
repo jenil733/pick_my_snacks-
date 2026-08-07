@@ -1,6 +1,7 @@
 class AppImages {
   AppImages._();
 
+  static const String appIcon = 'assets/images/app_icon_transparent.png';
   static const String water = 'assets/images/water_bottle.svg';
   static const String cola = 'assets/images/cola_bottle.svg';
   static const String chips = 'assets/images/chips.svg';

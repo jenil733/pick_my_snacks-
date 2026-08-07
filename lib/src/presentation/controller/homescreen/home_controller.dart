@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:developer';
 
@@ -15,6 +16,7 @@ import 'package:pick_my_snacks/src/domain/usecase/get_hold_orders_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/hold_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/resume_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_order_usecase.dart';
+import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
 
 class Product {
   const Product({
@@ -84,6 +86,14 @@ class HeldBill {
     required this.createdAt,
     required this.items,
     this.gst = 0,
+    this.discountType = 'none',
+    this.discountValue = 0,
+    this.discountAmount = 0,
+    this.discountOffer = '',
+    this.discountReason = '',
+    this.charge = 0,
+    this.chargeReason = '',
+    this.backendSubtotal,
     this.backendTotal,
   });
 
@@ -91,12 +101,25 @@ class HeldBill {
   final DateTime createdAt;
   final List<CartItem> items;
   final double gst;
+  final String discountType;
+  final double discountValue;
+  final double discountAmount;
+  final String discountOffer;
+  final String discountReason;
+  final double charge;
+  final String chargeReason;
+  final double? backendSubtotal;
   final double? backendTotal;
 
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
-  double get subtotal => items.fold(0, (sum, item) => sum + item.total);
+  double get subtotal =>
+      backendSubtotal ?? items.fold(0, (sum, item) => sum + item.total);
   double get tax => gst;
-  double get total => backendTotal ?? subtotal + gst;
+  double get total =>
+      backendTotal ??
+      (subtotal + gst - discountAmount + charge)
+          .clamp(0, double.infinity)
+          .toDouble();
 }
 
 class HomeController extends GetxController {
@@ -126,6 +149,7 @@ class HomeController extends GetxController {
   final productError = RxnString();
   final paymentMethod = 'cash'.obs;
   final isSavingOrder = false.obs;
+  final isSyncingTotals = false.obs;
   final saveOrderError = RxnString();
   final savedOrderNumber = RxnString();
   final isHoldingOrder = false.obs;
@@ -136,9 +160,19 @@ class HomeController extends GetxController {
   final resumeOrderError = RxnString();
   final deletingOrderId = RxnInt();
   final deleteHeldBillError = RxnString();
+  final backendSubtotal = RxnDouble();
   final backendGst = RxnDouble();
   final backendTotal = RxnDouble();
+  final discountType = 'none'.obs;
+  final discountValue = 0.0.obs;
+  final discountOffer = ''.obs;
+  final discountReason = ''.obs;
+  final chargeAmount = 0.0.obs;
+  final chargeReason = ''.obs;
   int _nextBillId = 1;
+  Timer? _totalsSyncTimer;
+  Worker? _staffSelectionWorker;
+  int _totalsSyncRevision = 0;
   final Set<int> _resumedHeldOrderIds = <int>{};
 
   static const paymentMethods = <String>['cash', 'credit', 'card', 'upi'];
@@ -202,6 +236,12 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    if (Get.isRegistered<StaffController>()) {
+      _staffSelectionWorker = ever(
+        Get.find<StaffController>().selectedStaff,
+        (_) => refreshOrderTotals(),
+      );
+    }
     if (_getProductsUseCase == null) {
       _loadPreviewData();
       return;
@@ -301,9 +341,60 @@ class HomeController extends GetxController {
   }
 
   int get itemCount => cart.fold(0, (sum, item) => sum + item.quantity);
-  double get subtotal => cart.fold(0, (sum, item) => sum + item.total);
+  double get subtotal =>
+      backendSubtotal.value ?? cart.fold(0, (sum, item) => sum + item.total);
   double get tax => backendGst.value ?? 0;
-  double get total => backendTotal.value ?? subtotal;
+  double get discountAmount {
+    final value = discountValue.value;
+    if (discountType.value == 'flat') {
+      return value.clamp(0, subtotal + tax).toDouble();
+    }
+    if (discountType.value == 'percentage') {
+      return (subtotal * value.clamp(0, 100) / 100)
+          .clamp(0, subtotal + tax)
+          .toDouble();
+    }
+    return 0;
+  }
+
+  double get total =>
+      backendTotal.value ??
+      (subtotal + tax - discountAmount + chargeAmount.value)
+          .clamp(0, double.infinity)
+          .toDouble();
+
+  void applyDiscount({
+    required String type,
+    required double value,
+    String offer = '',
+    String reason = '',
+  }) {
+    discountType.value = type == 'percentage' ? 'percentage' : 'flat';
+    discountValue.value = value;
+    discountOffer.value = offer.trim();
+    discountReason.value = reason.trim();
+    _queueOrderTotalsSync();
+  }
+
+  void clearDiscount() {
+    discountType.value = 'none';
+    discountValue.value = 0;
+    discountOffer.value = '';
+    discountReason.value = '';
+    _queueOrderTotalsSync();
+  }
+
+  void applyCharge({required double amount, String reason = ''}) {
+    chargeAmount.value = amount;
+    chargeReason.value = reason.trim();
+    _queueOrderTotalsSync();
+  }
+
+  void clearCharge() {
+    chargeAmount.value = 0;
+    chargeReason.value = '';
+    _queueOrderTotalsSync();
+  }
 
   Future<bool> saveOrder({required int? staffId}) async {
     final useCase = _saveOrderUseCase;
@@ -323,6 +414,7 @@ class HomeController extends GetxController {
       return false;
     }
 
+    _cancelTotalsSync();
     log('Starting save order...', name: 'SaveOrder');
     log('Selected staff ID: $staffId', name: 'SaveOrder');
     log('Payment method: ${paymentMethod.value}', name: 'SaveOrder');
@@ -337,28 +429,17 @@ class HomeController extends GetxController {
     savedOrderNumber.value = null;
 
     try {
-      final response = await useCase(
-        SaveOrderRequest(
-          staffId: staffId,
-          paymentMode: paymentMethod.value,
-          products: cart
-              .map(
-                (item) => SaveOrderProductRequest(
-                  productId: item.product.id,
-                  quantity: item.quantity,
-                ),
-              )
-              .toList(),
-        ),
-      );
+      final response = await useCase(_saveOrderRequest(staffId));
       if (response.status == false) {
         saveOrderError.value = response.message ?? 'Unable to save the order.';
         log(saveOrderError.value!, name: 'SaveOrder');
         return false;
       }
-      backendGst.value = response.data?.order?.gst ?? 0;
-      backendTotal.value = response.data?.order?.total ?? subtotal;
-      final orderNumber = response.data?.order?.orderId?.trim();
+      final order = response.data?.order;
+      backendSubtotal.value = order?.subtotal;
+      backendGst.value = order?.gst ?? 0;
+      backendTotal.value = order?.total ?? subtotal;
+      final orderNumber = order?.orderId?.trim();
       if (orderNumber == null || orderNumber.isEmpty) {
         saveOrderError.value =
             'The server did not return an order number. Please try again.';
@@ -446,6 +527,12 @@ class HomeController extends GetxController {
       final response = await useCase(
         HoldOrderRequest(
           staffId: staffId,
+          discountType: discountType.value,
+          discountValue: discountValue.value,
+          offer: discountOffer.value,
+          discountReason: discountReason.value,
+          charge: chargeAmount.value,
+          chargeReason: chargeReason.value,
           paymentMode: paymentMethod.value,
           products: cart
               .map(
@@ -466,6 +553,7 @@ class HomeController extends GetxController {
       final order = response.data?.order;
       final bill = holdCurrentBill(
         id: order?.id,
+        subtotal: order?.subtotal,
         gst: order?.gst ?? 0,
         total: order?.total,
       );
@@ -594,8 +682,19 @@ class HomeController extends GetxController {
       );
 
       final bill = data?.bill;
+      backendSubtotal.value = bill?.subtotal;
       backendGst.value = bill?.gst ?? 0;
       backendTotal.value = bill?.total ?? subtotal;
+      final resumedDiscountType = bill?.discountType?.trim().toLowerCase();
+      discountType.value =
+          resumedDiscountType == 'flat' || resumedDiscountType == 'percentage'
+          ? resumedDiscountType!
+          : 'none';
+      discountValue.value = bill?.discountValue ?? 0;
+      discountOffer.value = bill?.offer?.toString() ?? '';
+      discountReason.value = bill?.discountReason ?? '';
+      chargeAmount.value = bill?.charge ?? 0;
+      chargeReason.value = '';
       final payment = bill?.paymentMode?.trim().toLowerCase();
       if (payment != null && paymentMethods.contains(payment)) {
         paymentMethod.value = payment;
@@ -669,7 +768,6 @@ class HomeController extends GetxController {
   }
 
   void addProduct(Product product) {
-    _resetBackendTotals();
     final index = cart.indexWhere(
       (item) => item.product.id == product.id && item.scannedWeightCode == null,
     );
@@ -679,12 +777,30 @@ class HomeController extends GetxController {
       cart[index].quantity++;
       cart.refresh();
     }
+    _queueOrderTotalsSync();
   }
 
   QrAddResult addProductFromQr(String rawValue) {
     final value = rawValue.trim();
+    if (value.isEmpty) {
+      return QrAddResult.failure('The scanned QR code is empty.');
+    }
+
+    final directProduct = products.firstWhereOrNull(
+      (product) => _matchesQrProductId(product, value),
+    );
+    if (directProduct != null) {
+      addProduct(directProduct);
+      final item = cart.firstWhere(
+        (item) =>
+            item.product.id == directProduct.id &&
+            item.scannedWeightCode == null,
+      );
+      return QrAddResult.success(item);
+    }
+
     if (!RegExp(r'^\d{9}$').hasMatch(value)) {
-      return QrAddResult.failure('QR code must contain exactly 9 digits.');
+      return QrAddResult.failure('Product code $value was not found.');
     }
 
     final qrProductId = value.substring(0, 4);
@@ -700,8 +816,6 @@ class HomeController extends GetxController {
     if (product == null) {
       return QrAddResult.failure('Product ID $qrProductId was not found.');
     }
-    _resetBackendTotals();
-
     final index = cart.indexWhere(
       (item) =>
           item.product.id == product.id && item.scannedWeightCode == weightCode,
@@ -709,11 +823,13 @@ class HomeController extends GetxController {
     if (index >= 0) {
       cart[index].quantity++;
       cart.refresh();
+      _queueOrderTotalsSync();
       return QrAddResult.success(cart[index]);
     }
 
     final item = CartItem(product: product, scannedWeightCode: weightCode);
     cart.add(item);
+    _queueOrderTotalsSync();
     return QrAddResult.success(item);
   }
 
@@ -722,35 +838,36 @@ class HomeController extends GetxController {
         ? '${product.id}'
         : product.productId.trim();
     final numericStoredId = int.tryParse(storedId);
+    final numericQrProductId = int.tryParse(qrProductId);
     return numericStoredId == null
         ? storedId.toLowerCase() == qrProductId.toLowerCase()
-        : numericStoredId == int.parse(qrProductId);
+        : numericQrProductId != null && numericStoredId == numericQrProductId;
   }
 
   void increment(CartItem item) {
-    _resetBackendTotals();
     item.quantity++;
     cart.refresh();
+    _queueOrderTotalsSync();
   }
 
   void decrement(CartItem item) {
-    _resetBackendTotals();
     if (item.quantity == 1) {
       cart.remove(item);
     } else {
       item.quantity--;
       cart.refresh();
     }
+    _queueOrderTotalsSync();
   }
 
   void remove(CartItem item) {
-    _resetBackendTotals();
     cart.remove(item);
+    _queueOrderTotalsSync();
   }
 
   void clearCart() {
     cart.clear();
-    _resetBackendTotals();
+    _queueOrderTotalsSync();
   }
 
   void startNewBill() {
@@ -762,20 +879,35 @@ class HomeController extends GetxController {
     deleteHeldBillError.value = null;
     searchController.clear();
     searchQuery.value = '';
+    _clearAdjustments();
     _resetBackendTotals();
     log('Started a new bill.', name: 'NewBill');
   }
 
-  HeldBill holdCurrentBill({int? id, double gst = 0, double? total}) {
+  HeldBill holdCurrentBill({
+    int? id,
+    double? subtotal,
+    double gst = 0,
+    double? total,
+  }) {
     final bill = HeldBill(
       id: id ?? _nextBillId++,
       createdAt: DateTime.now(),
       items: cart.map((item) => item.copy()).toList(),
       gst: gst,
+      discountType: discountType.value,
+      discountValue: discountValue.value,
+      discountAmount: discountAmount,
+      discountOffer: discountOffer.value,
+      discountReason: discountReason.value,
+      charge: chargeAmount.value,
+      chargeReason: chargeReason.value,
+      backendSubtotal: subtotal,
       backendTotal: total,
     );
     heldBills.insert(0, bill);
     cart.clear();
+    _clearAdjustments();
     _resetBackendTotals();
     return bill;
   }
@@ -783,18 +915,132 @@ class HomeController extends GetxController {
   void restoreHeldBill(HeldBill bill) {
     cart.assignAll(bill.items.map((item) => item.copy()));
     heldBills.remove(bill);
+    backendSubtotal.value = bill.subtotal;
     backendGst.value = bill.gst;
     backendTotal.value = bill.total;
+    discountType.value = bill.discountType;
+    discountValue.value = bill.discountValue;
+    discountOffer.value = bill.discountOffer;
+    discountReason.value = bill.discountReason;
+    chargeAmount.value = bill.charge;
+    chargeReason.value = bill.chargeReason;
   }
 
   void _resetBackendTotals() {
+    _cancelTotalsSync();
+    backendSubtotal.value = null;
     backendGst.value = null;
     backendTotal.value = null;
     savedOrderNumber.value = null;
   }
 
+  void refreshOrderTotals() {
+    _queueOrderTotalsSync(delay: Duration.zero);
+  }
+
+  void _queueOrderTotalsSync({
+    Duration delay = const Duration(milliseconds: 250),
+  }) {
+    _resetBackendTotals();
+    final useCase = _saveOrderUseCase;
+    final staffId = _selectedStaffId;
+    if (useCase == null || staffId == null || cart.isEmpty) return;
+
+    final revision = _totalsSyncRevision;
+    final request = _saveOrderRequest(staffId);
+    _totalsSyncTimer = Timer(
+      delay,
+      () => unawaited(_syncOrderTotals(useCase, request, revision)),
+    );
+  }
+
+  Future<void> _syncOrderTotals(
+    SaveOrderUseCase useCase,
+    SaveOrderRequest request,
+    int revision,
+  ) async {
+    isSyncingTotals.value = true;
+    try {
+      final response = await useCase(request);
+      if (revision != _totalsSyncRevision) return;
+      if (response.status == false) {
+        log(
+          response.message ?? 'Unable to refresh order totals.',
+          name: 'OrderTotals',
+        );
+        return;
+      }
+
+      final order = response.data?.order;
+      backendSubtotal.value = order?.subtotal;
+      backendGst.value = order?.gst ?? 0;
+      backendTotal.value = order?.total ?? subtotal;
+    } on DioException catch (error) {
+      if (revision == _totalsSyncRevision) {
+        log(_saveOrderApiError(error), name: 'OrderTotals', error: error);
+      }
+    } catch (error, stackTrace) {
+      if (revision == _totalsSyncRevision) {
+        log(
+          'Unable to refresh order totals.',
+          name: 'OrderTotals',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    } finally {
+      if (revision == _totalsSyncRevision) {
+        isSyncingTotals.value = false;
+      }
+    }
+  }
+
+  SaveOrderRequest _saveOrderRequest(int staffId) {
+    return SaveOrderRequest(
+      staffId: staffId,
+      discountType: discountType.value,
+      discountValue: discountValue.value,
+      offer: discountOffer.value,
+      discountReason: discountReason.value,
+      charge: chargeAmount.value,
+      chargeReason: chargeReason.value,
+      paymentMode: paymentMethod.value,
+      products: cart
+          .map(
+            (item) => SaveOrderProductRequest(
+              productId: item.product.id,
+              quantity: item.quantity,
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  int? get _selectedStaffId {
+    if (!Get.isRegistered<StaffController>()) return null;
+    return Get.find<StaffController>().selectedStaff.value?.id;
+  }
+
+  void _cancelTotalsSync() {
+    _totalsSyncTimer?.cancel();
+    _totalsSyncTimer = null;
+    _totalsSyncRevision++;
+    isSyncingTotals.value = false;
+  }
+
+  void _clearAdjustments() {
+    discountType.value = 'none';
+    discountValue.value = 0;
+    discountOffer.value = '';
+    discountReason.value = '';
+    chargeAmount.value = 0;
+    chargeReason.value = '';
+  }
+
   @override
   void onClose() {
+    _cancelTotalsSync();
+    _staffSelectionWorker?.dispose();
     searchController.dispose();
     super.onClose();
   }

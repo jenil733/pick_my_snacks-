@@ -23,7 +23,7 @@ class LoginRepositoryImpl implements LoginRepository {
     final token = response.data?.token;
 
     if (response.status == true && token != null && token.isNotEmpty) {
-      await _storage.setString(ApiService.authTokenKey, token);
+      await _storage.setString(LocalStorageService.authTokenKey, token);
     }
 
     return response;

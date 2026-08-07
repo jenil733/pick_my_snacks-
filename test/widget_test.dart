@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -109,6 +110,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Bill Summary'), findsOneWidget);
     expect(find.text('Print Receipt'), findsOneWidget);
+    expect(find.text('Copy Bill'), findsOneWidget);
     expect(find.text('Cart'), findsNothing);
     expect(tester.takeException(), isNull);
 
@@ -165,6 +167,80 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('accepts a button-activated external scanner code on tablet', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1000));
+    await tester.pumpWidget(homeApp);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    const scannerKeys = [
+      LogicalKeyboardKey.digit0,
+      LogicalKeyboardKey.digit0,
+      LogicalKeyboardKey.digit0,
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit9,
+      LogicalKeyboardKey.digit0,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit5,
+      LogicalKeyboardKey.digit0,
+    ];
+    for (final key in scannerKeys) {
+      await tester.sendKeyEvent(key);
+    }
+    await tester.pump();
+
+    final controller = Get.find<HomeController>();
+    expect(
+      controller.cart.where((item) => item.scannedWeightCode == '0250'),
+      isEmpty,
+    );
+
+    await tester.tap(find.byTooltip('Activate external scanner'));
+    await tester.pump();
+    for (final key in scannerKeys) {
+      await tester.sendKeyEvent(key);
+    }
+    await tester.pump();
+
+    final scannedItem = controller.cart.singleWhere(
+      (item) => item.product.id == 1 && item.scannedWeightCode == '0250',
+    );
+    expect(scannedItem.scannedWeightGrams, 250);
+    expect(find.text('Bill Summary'), findsOneWidget);
+    expect(
+      find.textContaining('${scannedItem.product.name} (0.250) added'),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Activate external scanner'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('accepts a product code from the tablet external scanner', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1000));
+    await tester.pumpWidget(homeApp);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final controller = Get.find<HomeController>();
+    expect(controller.cart.where((item) => item.product.id == 2), isEmpty);
+
+    await tester.tap(find.byTooltip('Activate external scanner'));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    final scannedItem = controller.cart.singleWhere(
+      (item) => item.product.id == 2,
+    );
+    expect(scannedItem.scannedWeightCode, isNull);
+    expect(scannedItem.quantity, 1);
+    expect(find.text('Bill Summary'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('holds the current bill from the mobile bill summary', (
     tester,
   ) async {
@@ -175,7 +251,7 @@ void main() {
     final controller = Get.find<HomeController>();
     await tester.tap(find.textContaining('View bill'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Hold Bill'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Hold'));
     await tester.pump();
 
     expect(controller.cart, isEmpty);
@@ -184,26 +260,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('starts a new bill and returns to mobile products', (
+  testWidgets('starts a new bill from the mobile billing summary', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     await tester.pumpWidget(homeApp);
     await tester.pump(const Duration(milliseconds: 300));
 
+    await tester.tap(find.textContaining('View bill'));
+    await tester.pumpAndSettle();
+
     final controller = Get.find<HomeController>();
-    expect(controller.cart, isNotEmpty);
+    expect(find.text('New Bill'), findsOneWidget);
+    expect(find.text('Hold'), findsOneWidget);
+    expect(find.text('Copy Bill'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('mobile-new-bill')));
+    await tester.pump();
+
+    expect(controller.cart, isEmpty);
+    expect(find.text('A new bill has been started.'), findsOneWidget);
+    expect(find.textContaining('Are you sure'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('returns to products without clearing the bill', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    await tester.pumpWidget(homeApp);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final controller = Get.find<HomeController>();
+    final initialCount = controller.itemCount;
 
     await tester.tap(find.textContaining('View bill'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'New Bill'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Add Product'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
 
-    expect(controller.cart, isEmpty);
-    expect(controller.paymentMethod.value, 'cash');
     expect(find.text('Search products'), findsOneWidget);
     expect(find.text('Bill Summary'), findsNothing);
+    expect(controller.itemCount, initialCount);
     expect(tester.takeException(), isNull);
   });
 
@@ -218,12 +314,15 @@ void main() {
     expect(find.text('Products'), findsOneWidget);
     expect(find.text('Selected Items (4)'), findsOneWidget);
     expect(find.text('Bill Summary'), findsNothing);
+    expect(find.text('Hold Bill'), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('Billing'));
     await tester.pumpAndSettle();
     expect(find.text('Bill Summary'), findsOneWidget);
+    expect(find.text('New Bill'), findsNothing);
     expect(find.text('Print Receipt'), findsOneWidget);
+    expect(find.text('Copy Bill'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -237,24 +336,45 @@ void main() {
     expect(find.text('Bill Summary'), findsOneWidget);
     expect(find.text('Items (3)'), findsOneWidget);
     expect(find.text('Print Receipt'), findsOneWidget);
-    expect(find.text('Held Bills'), findsOneWidget);
+    expect(find.text('Copy Bill'), findsOneWidget);
+    expect(find.byTooltip('Activate external scanner'), findsOneWidget);
+    expect(find.text('Held'), findsOneWidget);
+    // The cart action is hidden; the billing-summary Hold Bill action remains.
+    expect(find.text('Hold Bill'), findsOneWidget);
+    expect(find.text('New Bill'), findsOneWidget);
     expect(find.text('Walk-in Customer'), findsNothing);
     expect(find.text('UPI'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('updates cart totals when a product is added', (tester) async {
+  testWidgets('changes the tablet product add icon to Added', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     await tester.pumpWidget(homeApp);
     await tester.pump(const Duration(milliseconds: 300));
 
     final controller = Get.find<HomeController>();
-    expect(tester.takeException(), isNull);
-    controller.addProduct(controller.products.first);
+    final product = controller.products.singleWhere(
+      (item) => item.name == 'Coca Cola',
+    );
+    expect(find.byKey(ValueKey('product-add-${product.id}')), findsOneWidget);
+
+    await tester.tap(find.byKey(ValueKey('product-add-${product.id}')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ValueKey('product-add-${product.id}')), findsNothing);
+    expect(find.byKey(ValueKey('product-added-${product.id}')), findsOneWidget);
+    expect(
+      controller.cart.where((item) => item.product.id == product.id),
+      hasLength(1),
+    );
+
+    controller.remove(
+      controller.cart.singleWhere((item) => item.product.id == product.id),
+    );
     await tester.pump();
 
-    expect(find.text('Selected Items (5)'), findsOneWidget);
-    expect(find.text('₹110.00'), findsNWidgets(3));
+    expect(find.byKey(ValueKey('product-added-${product.id}')), findsNothing);
+    expect(find.byKey(ValueKey('product-add-${product.id}')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -279,35 +399,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   });
 
-  testWidgets('opens and restores a held bill from the app bar', (
+  testWidgets('shows the held-bills shortcut in the tablet header', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     await tester.pumpWidget(homeApp);
     await tester.pump(const Duration(milliseconds: 300));
 
-    final controller = Get.find<HomeController>();
-    controller.holdCurrentBill();
-    await tester.pump();
-
-    await tester.tap(find.text('Held Bills'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
-    expect(find.text('Bill #1'), findsOneWidget);
-
-    await tester.tap(find.text('Bill #1'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text('Continue Bill #1?'), findsOneWidget);
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
-    expect(controller.itemCount, 4);
-    expect(controller.heldBills, isEmpty);
-    Get.closeAllSnackbars();
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Held'), findsOneWidget);
+    expect(find.byTooltip('Activate external scanner'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -361,12 +461,49 @@ void main() {
     controller.onClose();
   });
 
+  test('adds a normal product from its QR product code', () {
+    final controller = HomeController();
+    controller.products.assign(
+      const Product(
+        id: 42,
+        productId: 'SNK-0042',
+        name: 'Test Snack',
+        unit: '50g',
+        price: 25,
+        image: '',
+      ),
+    );
+
+    final result = controller.addProductFromQr('SNK-0042');
+
+    expect(result.isSuccess, isTrue);
+    expect(result.item!.product.id, 42);
+    expect(result.item!.scannedWeightCode, isNull);
+    expect(result.item!.quantity, 1);
+
+    final repeatedResult = controller.addProductFromQr('snk-0042');
+    expect(repeatedResult.item!.quantity, 2);
+    controller.onClose();
+  });
+
   test('rejects an invalid product QR code', () {
     final controller = HomeController()..onInit();
 
     expect(controller.addProductFromQr('123').isSuccess, isFalse);
     expect(controller.addProductFromQr('999990250').isSuccess, isFalse);
     expect(controller.addProductFromQr('000190000').isSuccess, isFalse);
+    controller.onClose();
+  });
+
+  test('uses the API subtotal until the cart changes', () {
+    final controller = HomeController()..onInit();
+
+    controller.backendSubtotal.value = 432.10;
+    expect(controller.subtotal, 432.10);
+
+    controller.increment(controller.cart.first);
+    expect(controller.backendSubtotal.value, isNull);
+    expect(controller.subtotal, isNot(432.10));
     controller.onClose();
   });
 
@@ -395,9 +532,10 @@ void main() {
     ];
     final bytes = await ReceiptPrinterService().buildReceiptBytes(
       items: receiptItems,
-      subtotal: controller.subtotal,
+      subtotal: 1300,
       tax: 65,
       total: 1365,
+      paymentMethod: 'upi',
       orderNumber: 'ORD0012',
       paperSize: ReceiptPaperSize.mm58,
     );
@@ -414,15 +552,18 @@ void main() {
     expect(receiptText, contains('Order No: ORD0012'));
     expect(receiptText, contains('Item'));
     expect(receiptText, contains('Total Items:'));
-    expect(receiptText, contains('Subtotal'));
-    expect(receiptText, contains('GST'));
+    expect(receiptText, isNot(contains('Subtotal')));
     expect(receiptText, contains('Grand Total'));
+    expect(receiptText, isNot(contains('Payment Method:')));
+    expect(receiptText, isNot(contains('UPI')));
+    expect(_countBytePatterns(bytes, const [29, 118, 48]), 2);
     expect(receiptText, contains('65.00'));
     expect(receiptText, contains('1365.00'));
     expect(receiptText, contains('20.00'));
     expect(receiptText, contains('1300.00'));
     expect(receiptText, contains('TEST'));
     expect(receiptText, contains('RODUCT'));
+    expect(receiptText, contains('R BOTT'));
     expect(receiptText, isNot(contains('TEST PRODUCT')));
     expect(receiptText, contains('Unit'));
     expect(receiptText, contains('1PC'));
@@ -440,30 +581,38 @@ void main() {
       (line) => line.contains('FIXED') && line.contains('500.00'),
     );
     expect(fixedColumnLine, contains('100PCS'));
-    final moneyLines = receiptText
-        .split('\n')
-        .where(
-          (line) =>
-              line.contains('Subtotal') ||
-              line.contains('GST') ||
-              line.contains('Grand Total'),
-        )
-        .toList();
-    expect(moneyLines, hasLength(3));
-    expect(
-      moneyLines.map((line) {
-        final label = line.contains('Subtotal')
-            ? 'Subtotal'
-            : line.contains('Grand Total')
-            ? 'Grand Total'
-            : 'GST';
-        return line.indexOf('Rs.') - line.indexOf(label);
-      }).toSet(),
-      hasLength(1),
+    final thankYouLineIndex = receiptLines.indexWhere(
+      (line) => line.contains('THANK YOU VISIT AGAIN'),
     );
+    expect(thankYouLineIndex, greaterThan(0));
+    expect(receiptLines[thankYouLineIndex - 1], contains('---'));
     expect(receiptText, isNot(contains('CGST')));
     expect(receiptText, isNot(contains('SGST')));
     expect(receiptText, contains('THANK YOU VISIT AGAIN'));
+    controller.onClose();
+  });
+
+  test('builds a clear duplicate bill without prices', () async {
+    final controller = HomeController()..onInit();
+    final bytes = await ReceiptPrinterService().buildDuplicateBillBytes(
+      items: controller.cart,
+      orderNumber: 'ORD19711',
+      paperSize: ReceiptPaperSize.mm58,
+    );
+    final billText = String.fromCharCodes(bytes);
+
+    expect(billText, contains('DUPLICATE'));
+    expect(billText, isNot(contains('GSTIN')));
+    expect(billText, contains('CELL:7339595793'));
+    expect(billText, contains('Bill No: ORD19711'));
+    expect(billText, contains('Product'));
+    expect(billText, contains('Qty'));
+    expect(billText, contains('Unit'));
+    expect(billText, isNot(contains('Rate')));
+    expect(billText, isNot(contains('20.00')));
+    expect(billText, contains('--------------------------------'));
+    expect(billText, contains('Total Items:'));
+    expect(billText, isNot(contains('Grand Total')));
     controller.onClose();
   });
 }
@@ -505,6 +654,21 @@ bool _containsBytes(List<int> source, List<int> pattern) {
     if (matches) return true;
   }
   return false;
+}
+
+int _countBytePatterns(List<int> source, List<int> pattern) {
+  var count = 0;
+  for (var index = 0; index <= source.length - pattern.length; index++) {
+    var matches = true;
+    for (var offset = 0; offset < pattern.length; offset++) {
+      if (source[index + offset] != pattern[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) count++;
+  }
+  return count;
 }
 
 double _rasterInkRatio(List<int> receipt) {
