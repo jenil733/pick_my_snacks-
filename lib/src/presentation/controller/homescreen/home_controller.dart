@@ -72,8 +72,9 @@ class CartItem {
     this.backendRowTotal,
     List<KotProductReference>? kotProductReferences,
     String? uniqueId,
-  })  : uniqueId = uniqueId ?? '${DateTime.now().microsecondsSinceEpoch}_${product.id}',
-        kotProductReferences = kotProductReferences ?? <KotProductReference>[];
+  }) : uniqueId =
+           uniqueId ?? '${DateTime.now().microsecondsSinceEpoch}_${product.id}',
+       kotProductReferences = kotProductReferences ?? <KotProductReference>[];
 
   final String uniqueId;
   final Product product;
@@ -1591,7 +1592,7 @@ class HomeController extends GetxController {
     }
     if (targetId == null) {
       takeAwaySaveOrderError.value =
-          'Print the Kitchen Bill before completing the take-away order.';
+          'Send the Kitchen Bill before completing the take-away order.';
       return false;
     }
 
@@ -1711,8 +1712,8 @@ class HomeController extends GetxController {
         : pendingKitchenItems;
     if (pendingItems.isEmpty) {
       kotOrderError.value = selectedOnly
-          ? 'Select at least one new product to print.'
-          : 'No new kitchen items to print.';
+          ? 'Select at least one new product to send.'
+          : 'No new kitchen items to send.';
       return false;
     }
 
@@ -1847,6 +1848,11 @@ class HomeController extends GetxController {
     if (takeAwayCustomerName.value.trim().isEmpty ||
         takeAwayCustomerPhone.value.trim().isEmpty) {
       takeAwayHoldError.value = 'Customer name and phone number are required.';
+      return false;
+    }
+    if (!RegExp(r'^\d{10}$').hasMatch(takeAwayCustomerPhone.value.trim())) {
+      takeAwayHoldError.value =
+          'Customer phone number must be exactly 10 digits.';
       return false;
     }
 
@@ -1996,8 +2002,6 @@ class HomeController extends GetxController {
         .toList();
   }
 
-
-
   bool isKitchenItemSelected(CartItem item) =>
       kitchenSelectedItems.contains(item);
 
@@ -2020,7 +2024,11 @@ class HomeController extends GetxController {
     kitchenOrderAwaitingPrintTable.value = null;
   }
 
-  Future<bool> completeKotOrder({int? tableId, int? staffId}) async {
+  Future<bool> completeKotOrder({
+    int? tableId,
+    int? staffId,
+    bool recoverMissingHold = true,
+  }) async {
     final useCase = _saveKotUseCase;
     if (useCase == null) {
       completeKotOrderError.value = 'KOT completion service is not registered.';
@@ -2036,11 +2044,13 @@ class HomeController extends GetxController {
     isCompletingKotOrder.value = true;
     completeKotOrderError.value = null;
     try {
-      final response = await _completeKotWithMissingHoldRecovery(
-        useCase,
-        selectedTableId,
-        staffId: staffId,
-      );
+      final response = recoverMissingHold
+          ? await _completeKotWithMissingHoldRecovery(
+              useCase,
+              selectedTableId,
+              staffId: staffId,
+            )
+          : await useCase(selectedTableId);
       final data = response.data;
       final order = data?.completedOrder;
       if (response.status == false || data == null || order == null) {
@@ -2133,6 +2143,17 @@ class HomeController extends GetxController {
         'using the KOT product or quantity controls before closing.';
     log(kotOrderError.value!, name: 'ReconcileKotOrder');
     return false;
+  }
+
+  /// Makes sure the backend has every cart row before the KOT is completed.
+  ///
+  /// The Kitchen Bill can intentionally send only selected products. Any
+  /// unselected rows must still be saved when the final bill is closed,
+  /// otherwise the backend total covers only the selected subset.
+  Future<bool> prepareKotOrderForCompletion({required int? staffId}) async {
+    if (!await reconcileEditedKotOrder(staffId: staffId)) return false;
+    if (pendingKitchenItems.isEmpty) return true;
+    return saveKitchenOrder(staffId: staffId, prepareForKitchenPrint: false);
   }
 
   static bool _isMissingHoldBill(String? message) {
@@ -2612,13 +2633,9 @@ class HomeController extends GetxController {
     if (index < 0) {
       final item = CartItem(product: product);
       cart.add(item);
-      kitchenSelectedItems.add(item);
     } else {
       cart[index].quantity++;
       cart.refresh();
-      if (!kitchenSelectedItems.contains(cart[index])) {
-        kitchenSelectedItems.add(cart[index]);
-      }
     }
     _queueOrderTotalsSync();
   }
@@ -2669,16 +2686,12 @@ class HomeController extends GetxController {
     if (index >= 0) {
       cart[index].quantity++;
       cart.refresh();
-      if (!kitchenSelectedItems.contains(cart[index])) {
-        kitchenSelectedItems.add(cart[index]);
-      }
       _queueOrderTotalsSync();
       return QrAddResult.success(cart[index]);
     }
 
     final item = CartItem(product: product, scannedWeightCode: weightCode);
     cart.add(item);
-    kitchenSelectedItems.add(item);
     _queueOrderTotalsSync();
     return QrAddResult.success(item);
   }

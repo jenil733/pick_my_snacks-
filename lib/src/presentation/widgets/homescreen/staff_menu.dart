@@ -7,8 +7,18 @@ import 'package:pick_my_snacks/src/core/utils/navigation/approutes.dart';
 import 'package:pick_my_snacks/src/data/model/get_staff.dart';
 import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
 
+class StaffMenuButtonController {
+  Future<void> Function()? _openMenu;
+
+  Future<void> open() async {
+    await _openMenu?.call();
+  }
+}
+
 class StaffMenu extends StatefulWidget {
-  const StaffMenu({super.key});
+  const StaffMenu({this.buttonController, super.key});
+
+  final StaffMenuButtonController? buttonController;
 
   @override
   State<StaffMenu> createState() => _StaffMenuState();
@@ -18,6 +28,7 @@ class _StaffMenuState extends State<StaffMenu>
     with SingleTickerProviderStateMixin {
   final _buttonKey = GlobalKey();
   late final AnimationController _shineController;
+  bool _isMenuOpen = false;
 
   StaffController get _controller => Get.isRegistered<StaffController>()
       ? Get.find<StaffController>()
@@ -26,6 +37,7 @@ class _StaffMenuState extends State<StaffMenu>
   @override
   void initState() {
     super.initState();
+    widget.buttonController?._openMenu = _activate;
     _shineController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -33,7 +45,16 @@ class _StaffMenuState extends State<StaffMenu>
   }
 
   @override
+  void didUpdateWidget(covariant StaffMenu oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.buttonController == widget.buttonController) return;
+    oldWidget.buttonController?._openMenu = null;
+    widget.buttonController?._openMenu = _activate;
+  }
+
+  @override
   void dispose() {
+    widget.buttonController?._openMenu = null;
     _shineController.dispose();
     super.dispose();
   }
@@ -46,7 +67,7 @@ class _StaffMenuState extends State<StaffMenu>
         key: _buttonKey,
         color: Colors.transparent,
         child: InkWell(
-          onTap: controller.isLoading.value ? null : _openMenu,
+          onTap: controller.isLoading.value ? null : _activate,
           borderRadius: BorderRadius.circular(10),
           child: Container(
             width: 145,
@@ -159,6 +180,16 @@ class _StaffMenuState extends State<StaffMenu>
         ),
       ),
     );
+  }
+
+  Future<void> _activate() async {
+    if (_controller.isLoading.value || _isMenuOpen) return;
+    _isMenuOpen = true;
+    try {
+      await _openMenu();
+    } finally {
+      _isMenuOpen = false;
+    }
   }
 
   Future<void> _openMenu() async {

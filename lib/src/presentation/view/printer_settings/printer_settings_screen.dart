@@ -47,14 +47,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
             ),
             const SizedBox(height: 12),
             _PrinterAssignment(
-              role: PrinterRole.kitchen,
-              printer: _manager.printerFor(PrinterRole.kitchen),
-              isTesting: _testing.contains(PrinterRole.kitchen),
-              onChange: () => _choosePrinter(PrinterRole.kitchen),
-              onTest: () => _testPrinter(PrinterRole.kitchen),
-            ),
-            const SizedBox(height: 12),
-            _PrinterAssignment(
               role: PrinterRole.takeAway,
               printer: _manager.printerFor(PrinterRole.takeAway),
               isTesting: _testing.contains(PrinterRole.takeAway),

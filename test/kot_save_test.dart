@@ -263,6 +263,51 @@ void main() {
     expect(controller.completeKotOrderError.value, isNull);
   });
 
+  test(
+    'can close through only the KOT save API without recreating a hold',
+    () async {
+      final kotOrderRepository = _RecreatedKotOrderRepository();
+      final closeRepository = _MissingThenClosingKotRepository();
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        SaveKotOrderUseCase(kotOrderRepository),
+        SaveKotUseCase(closeRepository),
+      );
+      controller.takeKotTable(4, staffName: 'Arun');
+      controller.addProduct(
+        const Product(
+          id: 8,
+          productId: 'P8',
+          name: 'Tea',
+          unit: 'cup',
+          price: 50,
+          image: '',
+        ),
+      );
+
+      final completed = await controller.completeKotOrder(
+        staffId: 7,
+        recoverMissingHold: false,
+      );
+
+      expect(completed, isFalse);
+      expect(closeRepository.callCount, 1);
+      expect(kotOrderRepository.requests, isEmpty);
+      expect(
+        controller.completeKotOrderError.value,
+        contains('Hold bill not found'),
+      );
+    },
+  );
+
   test('reports a backend failure when empty-hold deletion fails', () async {
     const completedResponse = KotSaveResponse(
       status: true,

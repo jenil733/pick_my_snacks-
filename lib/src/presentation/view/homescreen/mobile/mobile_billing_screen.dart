@@ -9,7 +9,6 @@ import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_summary_
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/common_widgets.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/take_away_orders_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/payment_method_dropdown.dart';
-import 'package:pick_my_snacks/src/printing/printer_settings_model.dart';
 
 class MobileBillingScreen extends StatelessWidget {
   const MobileBillingScreen({
@@ -313,13 +312,12 @@ class MobileBillingScreen extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: controller.cart.isEmpty
+                onPressed:
+                    controller.cart.isEmpty ||
+                        controller.isSavingTakeAwayHold.value ||
+                        controller.takeAwayHoldOrderId.value != null
                     ? null
-                    : () => printTakeAwayBill(
-                        context,
-                        controller,
-                        role: PrinterRole.kitchen,
-                      ),
+                    : () => sendTakeAwayKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: const Text('Kitchen Bill'),
                 style: FilledButton.styleFrom(
@@ -408,15 +406,14 @@ class MobileBillingScreen extends StatelessWidget {
             Expanded(
               child: FilledButton.icon(
                 onPressed:
-                    (!controller.hasKitchenOrderAwaitingPrint &&
-                            !controller.hasSelectedPendingKitchenItems) ||
+                    !controller.hasSelectedPendingKitchenItems ||
                         controller.isSavingKotOrder.value
                     ? null
-                    : () => printKitchen(context, controller),
+                    : () => sendKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: Text(
                   controller.isSavingKotOrder.value
-                      ? 'Printing...'
+                      ? 'Sending...'
                       : 'Kitchen Bill',
                 ),
                 style: FilledButton.styleFrom(

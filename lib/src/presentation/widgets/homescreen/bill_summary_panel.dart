@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:pick_my_snacks/src/core/const/appcolors.dart';
 import 'package:pick_my_snacks/src/core/utils/helper/app_toast.dart';
@@ -9,9 +10,7 @@ import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_adjustme
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/common_widgets.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/payment_method_dropdown.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/take_away_orders_panel.dart';
-import 'package:pick_my_snacks/src/printing/kitchen_printer.dart';
 import 'package:pick_my_snacks/src/printing/printer_manager.dart';
-import 'package:pick_my_snacks/src/printing/printer_settings_model.dart';
 import 'package:pick_my_snacks/src/services/receipt_printer_service.dart';
 
 class BillSummaryPanel extends StatelessWidget {
@@ -189,17 +188,30 @@ class BillSummaryPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _editTakeAwayCustomerDetails(context, controller),
+            icon: const Icon(Icons.edit_outlined, size: 19),
+            label: Text(
+              controller.takeAwayCustomerName.value.trim().isEmpty &&
+                      controller.takeAwayCustomerPhone.value.trim().isEmpty
+                  ? 'Customer Details'
+                  : 'Edit Customer Details',
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: controller.cart.isEmpty
+                onPressed:
+                    controller.cart.isEmpty ||
+                        controller.isSavingTakeAwayHold.value ||
+                        controller.takeAwayHoldOrderId.value != null
                     ? null
-                    : () => printTakeAwayBill(
-                        context,
-                        controller,
-                        role: PrinterRole.kitchen,
-                      ),
+                    : () => sendTakeAwayKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: const Text('Kitchen Bill'),
                 style: FilledButton.styleFrom(
@@ -274,15 +286,14 @@ class BillSummaryPanel extends StatelessWidget {
             Expanded(
               child: FilledButton.icon(
                 onPressed:
-                    (!controller.hasKitchenOrderAwaitingPrint &&
-                            !controller.hasSelectedPendingKitchenItems) ||
+                    !controller.hasSelectedPendingKitchenItems ||
                         controller.isSavingKotOrder.value
                     ? null
-                    : () => printKitchen(context, controller),
+                    : () => sendKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: Text(
                   controller.isSavingKotOrder.value
-                      ? 'Printing...'
+                      ? 'Sending...'
                       : 'Kitchen Bill',
                 ),
                 style: FilledButton.styleFrom(
@@ -624,8 +635,9 @@ Future<void> printDuplicateBill(
 
 Future<void> printReceipt(
   BuildContext context,
-  HomeController controller,
-) async {
+  HomeController controller, {
+  bool recoverMissingKotHold = true,
+}) async {
   final isKotFlow = controller.flow.value == PosFlow.kot;
   final hasCustomerDetails = await _requireCustomerDetails(context, controller);
   if (!hasCustomerDetails || !context.mounted) return;
@@ -635,7 +647,10 @@ Future<void> printReceipt(
   final selectedStaffId = staffController?.selectedStaff.value?.id;
   final orderSaved = isKotFlow
       ? controller.completedKotOrder.value != null ||
-            await controller.completeKotOrder(staffId: selectedStaffId)
+            await controller.completeKotOrder(
+              staffId: selectedStaffId,
+              recoverMissingHold: recoverMissingKotHold,
+            )
       : await _ensureOrderSaved(controller, selectedStaffId);
   if (!context.mounted) return;
   if (!orderSaved) {
@@ -747,38 +762,34 @@ Future<void> printReceipt(
   }
 }
 
-Future<bool> printKitchen(
+Future<bool> sendKotBill(
   BuildContext context,
   HomeController controller, {
   bool selectedOnly = true,
-  bool showSuccessToast = true,
 }) async {
   final hasCustomerDetails = await _requireCustomerDetails(context, controller);
   if (!hasCustomerDetails || !context.mounted) return false;
 
-  if (!controller.hasKitchenOrderAwaitingPrint) {
-    final items = selectedOnly
-        ? controller.selectedPendingKitchenItems
-        : controller.pendingKitchenItems;
-    if (items.isEmpty) {
-      if (selectedOnly) {
-        _showPrinterToast(context, 'Select at least one new product to print.');
-        return false;
-      }
-      return true;
+  final items = selectedOnly
+      ? controller.selectedPendingKitchenItems
+      : controller.pendingKitchenItems;
+  if (items.isEmpty) {
+    if (selectedOnly) {
+      _showPrinterToast(context, 'Select at least one new product to send.');
+      return false;
     }
+    return true;
   }
 
   final staffController = Get.isRegistered<StaffController>()
       ? Get.find<StaffController>()
       : null;
   final staff = staffController?.selectedStaff.value;
-  final orderSaved =
-      controller.hasKitchenOrderAwaitingPrint ||
-      await controller.saveKitchenOrder(
-        staffId: staff?.id,
-        selectedOnly: selectedOnly,
-      );
+  final orderSaved = await controller.saveKitchenOrder(
+    staffId: staff?.id,
+    selectedOnly: selectedOnly,
+    prepareForKitchenPrint: false,
+  );
   if (!context.mounted) return false;
   if (!orderSaved) {
     _showPrinterToast(
@@ -787,57 +798,15 @@ Future<bool> printKitchen(
     );
     return false;
   }
-  if (!Get.isRegistered<PrinterManager>()) {
-    _showPrinterToast(
-      context,
-      'Kitchen Printer is not configured. Order saved.',
-    );
-    controller.confirmKitchenOrderPrinted();
-    return true;
-  }
-
-  try {
-    await Get.find<PrinterManager>().printKitchen(
-      KitchenPrintJob(
-        items: controller.lastKitchenOrderItems
-            .map((item) => item.copy())
-            .toList(),
-        orderNumber: controller.savedOrderNumber.value ?? '',
-        paperSize: ReceiptPaperSize.mm58,
-        tableNumber: controller.activeTableNumber.value?.toString(),
-        staffName: staff?.name,
-        customerName: controller.takeAwayCustomerName.value,
-        customerPhone: controller.takeAwayCustomerPhone.value,
-      ),
-    );
-    if (!context.mounted) return false;
-    if (showSuccessToast) {
-      AppToast.show(context, 'Kitchen order sent to the kitchen printer.');
-    }
-    controller.confirmKitchenOrderPrinted();
-    return true;
-  } on PrinterManagerException catch (error) {
-    if (!context.mounted) return false;
-    AppToast.dismiss();
-    _showPrinterToast(context, '${error.message}. Order saved.');
-    controller.confirmKitchenOrderPrinted();
-    return true;
-  } catch (_) {
-    if (!context.mounted) return false;
-    AppToast.dismiss();
-    _showPrinterToast(context, 'Kitchen Printer is unavailable. Order saved.');
-    controller.confirmKitchenOrderPrinted();
-    return true;
-  }
+  AppToast.show(context, 'KOT bill sent successfully.');
+  return true;
 }
 
-/// Saves a kitchen hold before printing a take-away kitchen bill. The final
-/// take-away customer receipt remains a local print until checkout is added.
-Future<bool> printTakeAwayBill(
+/// Sends the selected take-away items through the take-away hold API.
+Future<bool> sendTakeAwayKotBill(
   BuildContext context,
-  HomeController controller, {
-  required PrinterRole role,
-}) async {
+  HomeController controller,
+) async {
   if (controller.cart.isEmpty) return false;
 
   final hasCustomerDetails = await _requireCustomerDetails(context, controller);
@@ -848,87 +817,57 @@ Future<bool> printTakeAwayBill(
   final staffController = Get.isRegistered<StaffController>()
       ? Get.find<StaffController>()
       : null;
-  var orderNumber =
-      'TA-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
-
-  if (role == PrinterRole.kitchen) {
-    final saved =
-        controller.takeAwayHoldOrderId.value != null ||
-        await controller.saveTakeAwayKitchenBill(
-          staffId: staffController?.selectedStaff.value?.id,
-        );
-    if (!context.mounted) return false;
-    if (!saved) {
-      _showPrinterToast(
-        context,
-        controller.takeAwayHoldError.value ??
-            'Unable to create the take-away kitchen bill.',
-      );
-      return false;
-    }
-    orderNumber = controller.savedOrderNumber.value ?? orderNumber;
-  } else if (role == PrinterRole.takeAway) {
-    orderNumber = controller.savedOrderNumber.value ?? orderNumber;
-  }
-
-  var items = role == PrinterRole.kitchen
-      ? controller.takeAwayHoldOrderId.value != null &&
-                controller.lastKitchenOrderItems.isNotEmpty
-            ? controller.lastKitchenOrderItems
-                  .map((item) => item.copy())
-                  .toList()
-            : controller.cart
-                  .where(controller.isKitchenItemSelected)
-                  .map((item) => item.copy())
-                  .toList()
-      : controller.cart.map((item) => item.copy()).toList();
-
-  if (items.isEmpty) {
+  final saved = await controller.saveTakeAwayKitchenBill(
+    staffId: staffController?.selectedStaff.value?.id,
+  );
+  if (!context.mounted) return false;
+  if (!saved) {
     _showPrinterToast(
       context,
-      'Select at least one product for the Kitchen Bill.',
+      controller.takeAwayHoldError.value ??
+          'Unable to send the take-away KOT bill.',
     );
     return false;
   }
+  AppToast.show(context, 'Take-away KOT bill sent successfully.');
+  return true;
+}
+
+Future<bool> printTakeAwayBill(
+  BuildContext context,
+  HomeController controller,
+) async {
+  if (controller.cart.isEmpty) return false;
+
+  final orderNumber =
+      controller.savedOrderNumber.value ??
+      'TA-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+  final items = controller.cart.map((item) => item.copy()).toList();
 
   if (!Get.isRegistered<PrinterManager>()) {
-    _showPrinterToast(context, '${role.label} Printer is not configured.');
+    _showPrinterToast(context, 'Take Away Printer is not configured.');
     return true;
   }
 
   try {
     final manager = Get.find<PrinterManager>();
-    if (role == PrinterRole.kitchen) {
-      await manager.printKitchen(
-        KitchenPrintJob(
-          items: items,
-          orderNumber: orderNumber,
-          paperSize: ReceiptPaperSize.mm58,
-          title: 'KITCHEN BILL',
-          staffName: staffController?.selectedStaff.value?.name,
-          customerName: controller.takeAwayCustomerName.value,
-          customerPhone: controller.takeAwayCustomerPhone.value,
-        ),
-      );
-    } else {
-      await manager.printTakeAwayReceipt(
-        ReceiptPrintJob(
-          items: items,
-          subtotal: controller.subtotal,
-          tax: controller.tax,
-          discount: controller.discountAmount,
-          charge: controller.chargeAmount.value,
-          total: controller.total,
-          paymentMethod: controller.paymentMethod.value,
-          orderNumber: orderNumber,
-          showRate: false,
-          customerName: controller.takeAwayCustomerName.value,
-          customerPhone: controller.takeAwayCustomerPhone.value,
-        ),
-      );
-    }
+    await manager.printTakeAwayReceipt(
+      ReceiptPrintJob(
+        items: items,
+        subtotal: controller.subtotal,
+        tax: controller.tax,
+        discount: controller.discountAmount,
+        charge: controller.chargeAmount.value,
+        total: controller.total,
+        paymentMethod: controller.paymentMethod.value,
+        orderNumber: orderNumber,
+        showRate: false,
+        customerName: controller.takeAwayCustomerName.value,
+        customerPhone: controller.takeAwayCustomerPhone.value,
+      ),
+    );
     if (!context.mounted) return false;
-    AppToast.show(context, '${role.label} printed.');
+    AppToast.show(context, 'Take Away Printer printed.');
     return true;
   } on PrinterManagerException catch (error) {
     if (!context.mounted) return false;
@@ -940,7 +879,7 @@ Future<bool> printTakeAwayBill(
     AppToast.dismiss();
     _showPrinterToast(
       context,
-      '${role.label} Printer is unavailable. Bill completed.',
+      'Take Away Printer is unavailable. Bill completed.',
     );
     return true;
   }
@@ -951,11 +890,15 @@ Future<bool> _requireCustomerDetails(
   HomeController controller,
 ) async {
   final isRequired = controller.flow.value == PosFlow.takeAway;
+  final customerName = controller.takeAwayCustomerName.value.trim();
+  final customerPhone = controller.takeAwayCustomerPhone.value.trim();
+  final hasValidPhone = RegExp(r'^\d{10}$').hasMatch(customerPhone);
   if (!isRequired && controller.isCustomerDetailsPrompted.value) {
     return true;
   }
-  if (controller.takeAwayCustomerName.value.trim().isNotEmpty &&
-      controller.takeAwayCustomerPhone.value.trim().isNotEmpty) {
+  if (customerName.isNotEmpty &&
+      customerPhone.isNotEmpty &&
+      (!isRequired || hasValidPhone)) {
     if (!isRequired) {
       controller.isCustomerDetailsPrompted.value = true;
     }
@@ -968,6 +911,18 @@ Future<bool> _requireCustomerDetails(
     return true;
   }
 
+  return _editTakeAwayCustomerDetails(
+    context,
+    controller,
+    isRequired: isRequired,
+  );
+}
+
+Future<bool> _editTakeAwayCustomerDetails(
+  BuildContext context,
+  HomeController controller, {
+  bool isRequired = true,
+}) async {
   final details = await showDialog<_TakeAwayCustomerDetails>(
     context: context,
     barrierDismissible: false,
@@ -1013,7 +968,7 @@ class _TakeAwayCustomerDialogState extends State<_TakeAwayCustomerDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   bool _nameError = false;
-  bool _phoneError = false;
+  String? _phoneError;
 
   @override
   void initState() {
@@ -1061,17 +1016,21 @@ class _TakeAwayCustomerDialogState extends State<_TakeAwayCustomerDialog> {
             TextField(
               controller: _phoneController,
               onChanged: (_) {
-                if (_phoneError) {
-                  setState(() => _phoneError = false);
+                if (_phoneError != null) {
+                  setState(() => _phoneError = null);
                 }
               },
               keyboardType: TextInputType.phone,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+              ],
               decoration: InputDecoration(
                 labelText: widget.isRequired
                     ? 'Phone number *'
                     : 'Phone number',
                 border: const OutlineInputBorder(),
-                errorText: _phoneError ? 'Phone number is required.' : null,
+                errorText: _phoneError,
               ),
             ),
           ],
@@ -1098,10 +1057,17 @@ class _TakeAwayCustomerDialogState extends State<_TakeAwayCustomerDialog> {
   void _submit() {
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
-    if (widget.isRequired && (name.isEmpty || phone.isEmpty)) {
+    final phoneIsInvalid =
+        phone.isNotEmpty && !RegExp(r'^\d{10}$').hasMatch(phone);
+    if ((widget.isRequired && (name.isEmpty || phone.isEmpty)) ||
+        phoneIsInvalid) {
       setState(() {
         _nameError = name.isEmpty;
-        _phoneError = phone.isEmpty;
+        _phoneError = phone.isEmpty
+            ? 'Phone number is required.'
+            : phoneIsInvalid
+            ? 'Phone number must be exactly 10 digits.'
+            : null;
       });
       return;
     }
@@ -1126,7 +1092,7 @@ Future<void> completeTakeAway(
     return;
   }
 
-  await printTakeAwayBill(context, controller, role: PrinterRole.takeAway);
+  await printTakeAwayBill(context, controller);
 
   if (context.mounted) {
     controller.startNewBill();
@@ -1148,35 +1114,14 @@ Future<void> closeKotBill(
     );
     return;
   }
-  final staffController = Get.isRegistered<StaffController>()
-      ? Get.find<StaffController>()
-      : null;
-  final reconciled = await controller.reconcileEditedKotOrder(
-    staffId: staffController?.selectedStaff.value?.id,
-  );
-  if (!context.mounted) return;
-  if (!reconciled) {
+  if (controller.pendingKitchenItems.isNotEmpty) {
     _showPrinterToast(
       context,
-      controller.kotOrderError.value ?? 'Unable to update the table order.',
+      'Send pending products through the Kitchen Bill before closing.',
     );
     return;
   }
-  if (controller.pendingKitchenItems.isNotEmpty) {
-    final orderSaved = await controller.saveKitchenOrder(
-      staffId: staffController?.selectedStaff.value?.id,
-      prepareForKitchenPrint: false,
-    );
-    if (!context.mounted) return;
-    if (!orderSaved) {
-      _showPrinterToast(
-        context,
-        controller.kotOrderError.value ?? 'Unable to save the table order.',
-      );
-      return;
-    }
-  }
-  await printReceipt(context, controller);
+  await printReceipt(context, controller, recoverMissingKotHold: false);
 }
 
 Future<void> holdKotTable(

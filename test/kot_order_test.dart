@@ -1,19 +1,25 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pick_my_snacks/src/core/utils/helper/app_toast.dart';
 import 'package:pick_my_snacks/src/data/model/get_delete.dart';
+import 'package:pick_my_snacks/src/data/model/get_saveorder.dart';
 import 'package:pick_my_snacks/src/data/model/get_table_status.dart';
 import 'package:pick_my_snacks/src/data/model/post_kot_model.dart';
 import 'package:pick_my_snacks/src/data/model/processing.dart';
 import 'package:pick_my_snacks/src/data/model/remove_kot_quantity.dart';
 import 'package:pick_my_snacks/src/data/model/save_order.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_order_repository.dart';
+import 'package:pick_my_snacks/src/domain/repository/kot_save_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/delete_held_bill_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/order_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/remove_kot_quantity_repository.dart';
 import 'package:pick_my_snacks/src/domain/usecase/delete_held_bill_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/remove_kot_quantity_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_order_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/save_kot_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_order_usecase.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
+import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_summary_panel.dart';
 
 void main() {
   test('builds the KOT request with table, staff, and product fields', () {
@@ -35,101 +41,98 @@ void main() {
     expect(fields['products[0][qty]'], '2pcs');
   });
 
-  test(
-    'Kitchen Bill sends only items added since the previous print',
-    () async {
-      final repository = _FakeKotOrderRepository();
-      final normalRepository = _FakeOrderRepository();
-      final deleteRepository = _FakeDeleteHeldBillRepository();
-      final quantityRepository = _FakeRemoveKotQuantityRepository();
-      final controller = HomeController(
-        null,
-        SaveOrderUseCase(normalRepository),
-        null,
-        null,
-        null,
-        DeleteHeldBillUseCase(deleteRepository),
-        null,
-        null,
-        null,
-        SaveKotOrderUseCase(repository),
-        null,
-        null,
-        RemoveKotQuantityUseCase(quantityRepository),
-      );
-      controller.takeKotTable(3, staffName: 'Arun');
-      controller.addProduct(
-        const Product(
-          id: 101,
-          productId: 'P101',
-          name: 'Veg Sandwich',
-          unit: 'pc',
-          price: 80,
-          image: '',
-        ),
-      );
-      expect(controller.submittedKitchenTables.contains(3), isFalse);
+  test('Kitchen Bill sends only items added since the previous send', () async {
+    final repository = _FakeKotOrderRepository();
+    final normalRepository = _FakeOrderRepository();
+    final deleteRepository = _FakeDeleteHeldBillRepository();
+    final quantityRepository = _FakeRemoveKotQuantityRepository();
+    final controller = HomeController(
+      null,
+      SaveOrderUseCase(normalRepository),
+      null,
+      null,
+      null,
+      DeleteHeldBillUseCase(deleteRepository),
+      null,
+      null,
+      null,
+      SaveKotOrderUseCase(repository),
+      null,
+      null,
+      RemoveKotQuantityUseCase(quantityRepository),
+    );
+    controller.takeKotTable(3, staffName: 'Arun');
+    controller.addProduct(
+      const Product(
+        id: 101,
+        productId: 'P101',
+        name: 'Veg Sandwich',
+        unit: 'pc',
+        price: 80,
+        image: '',
+      ),
+    );
+    expect(controller.submittedKitchenTables.contains(3), isFalse);
 
-      final saved = await controller.saveKitchenOrder(staffId: 7);
+    final saved = await controller.saveKitchenOrder(staffId: 7);
 
-      expect(saved, isTrue);
-      expect(controller.submittedKitchenTables.contains(3), isTrue);
-      expect(repository.requests, hasLength(1));
-      expect(repository.requests.single.tableId, 3);
-      expect(repository.requests.single.staffId, 7);
-      expect(repository.requests.single.products.single.productId, 101);
-      expect(controller.savedOrderNumber.value, 'KOT-12');
-      expect(controller.kotOrderError.value, isNull);
-      expect(controller.lastKitchenOrderItems.single.product.id, 101);
+    expect(saved, isTrue);
+    expect(controller.submittedKitchenTables.contains(3), isTrue);
+    expect(repository.requests, hasLength(1));
+    expect(repository.requests.single.tableId, 3);
+    expect(repository.requests.single.staffId, 7);
+    expect(repository.requests.single.products.single.productId, 101);
+    expect(controller.savedOrderNumber.value, 'KOT-12');
+    expect(controller.kotOrderError.value, isNull);
+    expect(controller.lastKitchenOrderItems.single.product.id, 101);
 
-      controller.confirmKitchenOrderPrinted();
-      controller.addProduct(
-        const Product(
-          id: 202,
-          productId: 'P202',
-          name: 'Tea',
-          unit: 'cup',
-          price: 20,
-          image: '',
-        ),
-      );
+    controller.confirmKitchenOrderPrinted();
+    controller.addProduct(
+      const Product(
+        id: 202,
+        productId: 'P202',
+        name: 'Tea',
+        unit: 'cup',
+        price: 20,
+        image: '',
+      ),
+    );
 
-      final secondSaved = await controller.saveKitchenOrder(staffId: 7);
+    final secondSaved = await controller.saveKitchenOrder(staffId: 7);
 
-      expect(secondSaved, isTrue);
-      expect(repository.requests, hasLength(2));
-      expect(repository.requests.last.products, hasLength(1));
-      expect(repository.requests.last.products.single.productId, 202);
-      expect(controller.lastKitchenOrderItems.single.product.id, 202);
-      expect(controller.cart, hasLength(2));
-      expect(controller.subtotal, 100);
+    expect(secondSaved, isTrue);
+    expect(repository.requests, hasLength(2));
+    expect(repository.requests.last.products, hasLength(1));
+    expect(repository.requests.last.products.single.productId, 202);
+    expect(controller.lastKitchenOrderItems.single.product.id, 202);
+    expect(controller.cart, hasLength(2));
+    expect(controller.subtotal, 100);
 
-      controller.confirmKitchenOrderPrinted();
-      final duplicateSaved = await controller.saveKitchenOrder(staffId: 7);
+    controller.confirmKitchenOrderPrinted();
+    final duplicateSaved = await controller.saveKitchenOrder(staffId: 7);
 
-      expect(duplicateSaved, isFalse);
-      expect(repository.requests, hasLength(2));
-      expect(controller.kotOrderError.value, 'No new kitchen items to print.');
-      expect(normalRepository.requests, isEmpty);
+    expect(duplicateSaved, isFalse);
+    expect(repository.requests, hasLength(2));
+    expect(controller.kotOrderError.value, 'No new kitchen items to send.');
+    expect(normalRepository.requests, isEmpty);
 
-      controller.tableStatuses[3] = const TableStatusData(
-        tableId: 3,
-        tableStatus: 'Occupied',
-        isOccupied: 1,
-      );
-      final deleted = await controller.deleteActiveKotOrder();
+    controller.tableStatuses[3] = const TableStatusData(
+      tableId: 3,
+      tableStatus: 'Occupied',
+      isOccupied: 1,
+    );
+    final deleted = await controller.deleteActiveKotOrder();
 
-      expect(deleted, isTrue);
-      expect(deleteRepository.orderIds, isEmpty);
-      expect(quantityRepository.requests, isEmpty);
-      expect(controller.cart, isEmpty);
-      expect(controller.tableOrders.containsKey(3), isFalse);
-      expect(controller.submittedKitchenTables.contains(3), isFalse);
-      expect(controller.tableStatuses[3]?.occupied ?? false, isFalse);
-      expect(controller.activeTableNumber.value, isNull);
-      expect(controller.kotStage.value, KotStage.tables);
-    },
-  );
+    expect(deleted, isTrue);
+    expect(deleteRepository.orderIds, isEmpty);
+    expect(quantityRepository.requests, isEmpty);
+    expect(controller.cart, isEmpty);
+    expect(controller.tableOrders.containsKey(3), isFalse);
+    expect(controller.submittedKitchenTables.contains(3), isFalse);
+    expect(controller.tableStatuses[3]?.occupied ?? false, isFalse);
+    expect(controller.activeTableNumber.value, isNull);
+    expect(controller.kotStage.value, KotStage.tables);
+  });
 
   test(
     'same KOT product can be manually selected after holding the table',
@@ -170,8 +173,9 @@ void main() {
 
       controller.addProduct(product);
 
-      expect(controller.isKitchenItemSelected(controller.cart.single), isFalse);
-      controller.setKitchenItemSelected(controller.cart.single, true);
+      final pendingItem = controller.cart.last;
+      expect(controller.isKitchenItemSelected(pendingItem), isFalse);
+      controller.setKitchenItemSelected(pendingItem, true);
       expect(controller.selectedPendingKitchenItems, hasLength(1));
       expect(controller.selectedPendingKitchenItems.single.quantity, 1);
       expect(
@@ -181,6 +185,61 @@ void main() {
       expect(repository.requests, hasLength(2));
       expect(repository.requests.last.products.single.productId, 101);
       expect(repository.requests.last.products.single.quantity, 1);
+    },
+  );
+
+  test(
+    'closing a KOT sends products left out of the selected Kitchen Bill',
+    () async {
+      final repository = _FakeKotOrderRepository();
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        SaveKotOrderUseCase(repository),
+      );
+      controller.takeKotTable(3, staffName: 'Arun');
+      controller.addProduct(
+        const Product(
+          id: 101,
+          productId: 'P101',
+          name: 'Tea',
+          unit: 'pcs',
+          price: 15,
+          image: '',
+        ),
+      );
+      controller.addProduct(
+        const Product(
+          id: 202,
+          productId: 'P202',
+          name: 'Unselected item',
+          unit: 'pcs',
+          price: 50,
+          image: '',
+        ),
+      );
+      controller.setKitchenItemSelected(controller.cart.first, true);
+
+      expect(
+        await controller.saveKitchenOrder(staffId: 7, selectedOnly: true),
+        isTrue,
+      );
+      expect(repository.requests.single.products.single.productId, 101);
+      expect(controller.pendingKitchenItems, hasLength(1));
+
+      expect(await controller.prepareKotOrderForCompletion(staffId: 7), isTrue);
+
+      expect(repository.requests, hasLength(2));
+      expect(repository.requests.last.products, hasLength(1));
+      expect(repository.requests.last.products.single.productId, 202);
+      expect(controller.pendingKitchenItems, isEmpty);
     },
   );
 
@@ -281,6 +340,59 @@ void main() {
       expect(controller.lastKitchenOrderItems, isEmpty);
     },
   );
+
+  testWidgets('Close Bill blocks products that have not been sent to KOT', (
+    tester,
+  ) async {
+    final closeRepository = _TrackingKotSaveRepository();
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      SaveKotUseCase(closeRepository),
+    );
+    controller.takeKotTable(3, staffName: 'Arun');
+    controller.isCustomerDetailsPrompted.value = true;
+    controller.addProduct(
+      const Product(
+        id: 101,
+        productId: 'P101',
+        name: 'Naan',
+        unit: 'pcs',
+        price: 50,
+        image: '',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => closeKotBill(context, controller),
+            child: const Text('Close Bill'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Close Bill'));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Send pending products through the Kitchen Bill before closing.',
+      ),
+      findsOneWidget,
+    );
+    expect(closeRepository.tableIds, isEmpty);
+    AppToast.dismiss();
+  });
 
   test(
     'holds a KOT table as occupied without requesting a kitchen print',
@@ -529,6 +641,16 @@ class _FakeKotOrderRepository implements KotOrderRepository {
         ),
       ),
     );
+  }
+}
+
+class _TrackingKotSaveRepository implements KotSaveRepository {
+  final tableIds = <int>[];
+
+  @override
+  Future<KotSaveResponse> saveKot(int tableId) async {
+    tableIds.add(tableId);
+    return const KotSaveResponse(status: true);
   }
 }
 

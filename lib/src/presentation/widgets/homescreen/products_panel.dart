@@ -6,9 +6,14 @@ import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_contr
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/common_widgets.dart';
 
 class ProductsPanel extends StatelessWidget {
-  const ProductsPanel({required this.controller, super.key});
+  const ProductsPanel({
+    required this.controller,
+    this.searchFocusNode,
+    super.key,
+  });
 
   final HomeController controller;
+  final FocusNode? searchFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +28,7 @@ class ProductsPanel extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
             child: TextField(
               controller: controller.searchController,
+              focusNode: searchFocusNode,
               onChanged: (value) => controller.searchQuery.value = value,
               style: TextHelper.body,
               decoration: InputDecoration(

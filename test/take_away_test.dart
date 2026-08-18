@@ -487,6 +487,48 @@ void main() {
     );
   });
 
+  test(
+    'take away kitchen bill rejects an invalid phone before the API',
+    () async {
+      final repository = _FakeTakeAwayHoldRepository();
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        TakeAwayHoldUseCase(repository),
+      );
+      controller.addProduct(
+        const Product(
+          id: 4,
+          name: 'Burger',
+          unit: 'pcs',
+          price: 100,
+          image: '',
+        ),
+      );
+      controller.setKitchenItemSelected(controller.cart.single, true);
+      controller.takeAwayCustomerName.value = 'Anu';
+      controller.takeAwayCustomerPhone.value = '12345';
+
+      expect(await controller.saveTakeAwayKitchenBill(staffId: 1), isFalse);
+      expect(repository.requests, isEmpty);
+      expect(
+        controller.takeAwayHoldError.value,
+        'Customer phone number must be exactly 10 digits.',
+      );
+    },
+  );
+
   testWidgets('take away billing shows kitchen bill and take away actions', (
     tester,
   ) async {
@@ -520,6 +562,10 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Take Away'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Pending'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Completed'), findsOneWidget);
+    expect(
+      find.widgetWithText(OutlinedButton, 'Customer Details'),
+      findsOneWidget,
+    );
     expect(find.byType(Checkbox), findsWidgets);
     expect(controller.kitchenSelectedItems, isEmpty);
 
@@ -535,6 +581,26 @@ void main() {
     await tester.pump();
     expect(find.text('Customer name is required.'), findsOneWidget);
     expect(find.text('Phone number is required.'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    controller.takeAwayCustomerName.value = 'Anu';
+    controller.takeAwayCustomerPhone.value = '12345';
+    await tester.pump();
+    expect(
+      find.widgetWithText(OutlinedButton, 'Edit Customer Details'),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.widgetWithText(OutlinedButton, 'Edit Customer Details'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pump();
+    expect(
+      find.text('Phone number must be exactly 10 digits.'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 

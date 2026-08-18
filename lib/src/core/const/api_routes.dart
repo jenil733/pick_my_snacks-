@@ -8,7 +8,6 @@ class ApiRoutes {
   static const outOfStockProducts = 'outOfStockProducts';
   static const notificationCount = 'notificationCount';
   static const fcmToken = 'fcm_token';
-
   static const login = 'login_staff';
   static const staff = 'get_staff';
   static const tables = 'get_kot_tables';
@@ -33,7 +32,7 @@ class ApiRoutes {
   static String deleteHoldBill(int orderId) => 'delete_hold_bill/$orderId';
 
   static const apiKey = String.fromEnvironment(
-    'API_KEY',
+    'API_KEY',    
     defaultValue: 'dvvervdgdgdfgmtbjL7554434pvxmjts6MFL3F9FIuAPjmFI0g=',
   );
 }
