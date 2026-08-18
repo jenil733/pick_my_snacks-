@@ -406,6 +406,8 @@ class HomeController extends GetxController {
   final processingOrderError = RxnString();
   int _nextBillId = 1;
   Timer? _totalsSyncTimer;
+  Timer? _tableStatusSyncTimer;
+  bool _isRefreshingTableStatuses = false;
   Worker? _staffSelectionWorker;
   int _totalsSyncRevision = 0;
   final Set<int> _resumedHeldOrderIds = <int>{};
@@ -491,13 +493,6 @@ class HomeController extends GetxController {
 
     if (value == PosFlow.kot) {
       showKotTables();
-      if (_getTablesUseCase != null &&
-          tables.isEmpty &&
-          !isLoadingTables.value) {
-        unawaited(getTables());
-      } else if (_getTableStatusUseCase != null) {
-        unawaited(getTableStatuses());
-      }
     }
     flow.value = value;
     if (value == PosFlow.takeAway) {
@@ -566,6 +561,7 @@ class HomeController extends GetxController {
     processingOrder.value = null;
     processingOrderError.value = null;
     kotStage.value = KotStage.tables;
+    unawaited(refreshKotTables());
   }
 
   Future<void> showKotTableDetails(int tableNumber) async {
@@ -604,7 +600,7 @@ class HomeController extends GetxController {
     kitchenOrderAwaitingPrint.value = false;
     kitchenOrderAwaitingPrintTable.value = null;
     startNewBill();
-    kotStage.value = KotStage.tables;
+    showKotTables();
   }
 
   void _syncActiveTableOrder() {
@@ -652,20 +648,30 @@ class HomeController extends GetxController {
     await getTableStatuses();
   }
 
-  Future<void> getTableStatuses() async {
+  Future<void> getTableStatuses({bool silent = false}) async {
     final useCase = _getTableStatusUseCase;
-    if (useCase == null || isLoadingTableStatuses.value) return;
+    if (useCase == null || _isRefreshingTableStatuses) return;
 
-    isLoadingTableStatuses.value = true;
-    tableStatusError.value = null;
+    _isRefreshingTableStatuses = true;
+    if (!silent) {
+      isLoadingTableStatuses.value = true;
+      tableStatusError.value = null;
+    }
     try {
       final response = await useCase();
       if (response.status == false) {
-        tableStatuses.clear();
-        tableStatusError.value =
-            response.message ?? 'Unable to load table status.';
+        if (!silent) {
+          tableStatuses.clear();
+          tableStatusError.value =
+              response.message ?? 'Unable to load table status.';
+        }
         return;
       }
+      final previouslyOccupied = tableStatuses.values
+          .where((status) => status.occupied)
+          .map((status) => status.tableId)
+          .whereType<int>()
+          .toSet();
       final statuses = <int, TableStatusData>{};
       for (final status in response.data ?? const <TableStatusData>[]) {
         final tableId = status.tableId;
@@ -674,18 +680,53 @@ class HomeController extends GetxController {
         deletedKitchenTables.remove(tableId);
       }
       tableStatuses.assignAll(statuses);
-      final tableNumbersToVerify = statuses.values
+      tableStatusError.value = null;
+      final occupiedTableNumbers = statuses.values
           .where((status) => status.occupied)
           .map((status) => status.tableId)
-          .whereType<int>();
+          .whereType<int>()
+          .toSet();
+      final tableNumbersToVerify = silent
+          ? occupiedTableNumbers.where(
+              (tableId) =>
+                  !previouslyOccupied.contains(tableId) ||
+                  !processingOrders.containsKey(tableId),
+            )
+          : occupiedTableNumbers;
+      processingOrders.removeWhere(
+        (tableNumber, _) => !occupiedTableNumbers.contains(tableNumber),
+      );
       await _loadProcessingOrderSummaries(tableNumbersToVerify);
+
+      final selectedTable = selectedKotTableNumber.value;
+      if (selectedTable != null &&
+          !occupiedTableNumbers.contains(selectedTable) &&
+          !submittedKitchenTables.contains(selectedTable)) {
+        selectedKotTableNumber.value = null;
+        processingOrder.value = null;
+        processingOrderError.value = null;
+        kotStage.value = KotStage.tables;
+      }
     } catch (_) {
-      tableStatuses.clear();
-      processingOrders.clear();
-      tableStatusError.value = 'Unable to load table status. Please try again.';
+      if (!silent) {
+        tableStatuses.clear();
+        processingOrders.clear();
+        tableStatusError.value =
+            'Unable to load table status. Please try again.';
+      }
     } finally {
-      isLoadingTableStatuses.value = false;
+      _isRefreshingTableStatuses = false;
+      if (!silent) isLoadingTableStatuses.value = false;
     }
+  }
+
+  void _startTableStatusSync() {
+    if (_getTableStatusUseCase == null) return;
+    _tableStatusSyncTimer?.cancel();
+    _tableStatusSyncTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => unawaited(getTableStatuses(silent: true)),
+    );
   }
 
   Future<void> getProcessingOrder(int tableNumber) async {
@@ -833,7 +874,7 @@ class HomeController extends GetxController {
       backendGst.value = 0;
       backendTotal.value = 0;
       flow.value = PosFlow.kot;
-      kotStage.value = KotStage.tables;
+      showKotTables();
     }
   }
 
@@ -969,6 +1010,7 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    _startTableStatusSync();
     if (Get.isRegistered<StaffController>()) {
       _staffSelectionWorker = ever(
         Get.find<StaffController>().selectedStaff,
@@ -2258,10 +2300,7 @@ class HomeController extends GetxController {
     kitchenOrderAwaitingPrintTable.value = null;
     startNewBill();
     flow.value = PosFlow.kot;
-    kotStage.value = KotStage.tables;
-    if (_getTableStatusUseCase != null) {
-      unawaited(getTableStatuses());
-    }
+    showKotTables();
   }
 
   Future<bool> deleteActiveKotOrder() async {
@@ -2303,7 +2342,7 @@ class HomeController extends GetxController {
     kitchenOrderAwaitingPrintTable.value = null;
     startNewBill();
     flow.value = PosFlow.kot;
-    kotStage.value = KotStage.tables;
+    showKotTables();
   }
 
   String _saveOrderApiError(DioException error) {
@@ -3086,6 +3125,8 @@ class HomeController extends GetxController {
   @override
   void onClose() {
     _cancelTotalsSync();
+    _tableStatusSyncTimer?.cancel();
+    _tableStatusSyncTimer = null;
     _staffSelectionWorker?.dispose();
     searchController.dispose();
     super.onClose();

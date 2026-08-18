@@ -197,28 +197,9 @@ class _StaffMenuState extends State<StaffMenu>
     await controller.getStaff();
     if (!mounted) return;
 
-    final button = _buttonKey.currentContext?.findRenderObject() as RenderBox?;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (button == null || overlay == null) return;
-
-    final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
-    final bottomRight = button.localToGlobal(
-      button.size.bottomRight(Offset.zero),
-      ancestor: overlay,
-    );
-    final position = RelativeRect.fromRect(
-      Rect.fromPoints(topLeft, bottomRight),
-      Offset.zero & overlay.size,
-    );
-
-    final choice = await showMenu<_StaffChoice>(
+    final choice = await showDialog<_StaffChoice>(
       context: context,
-      position: position,
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
-      constraints: const BoxConstraints(minWidth: 240, maxWidth: 340),
-      items: _menuItems(controller),
+      builder: (context) => _StaffPickerDialog(controller: controller),
     );
     if (!mounted || choice == null) return;
 
@@ -233,93 +214,6 @@ class _StaffMenuState extends State<StaffMenu>
     }
   }
 
-  List<PopupMenuEntry<_StaffChoice>> _menuItems(StaffController controller) {
-    final items = <PopupMenuEntry<_StaffChoice>>[
-      const PopupMenuItem<_StaffChoice>(
-        enabled: false,
-        height: 36,
-        child: Text(
-          'Select staff',
-          style: TextStyle(
-            color: AppColors.yellowDark,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    ];
-
-    final error = controller.errorMessage.value;
-    if (error != null) {
-      items.add(
-        PopupMenuItem<_StaffChoice>(
-          value: const _StaffChoice.action(_StaffAction.retry),
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.refresh_rounded),
-            title: const Text('Retry'),
-            subtitle: Text(error, maxLines: 2, overflow: TextOverflow.ellipsis),
-          ),
-        ),
-      );
-    } else if (controller.staff.isEmpty) {
-      items.add(
-        const PopupMenuItem<_StaffChoice>(
-          enabled: false,
-          child: Text(
-            'No staff members found.',
-            style: TextStyle(color: AppColors.yellowDark),
-          ),
-        ),
-      );
-    } else {
-      for (final staff in controller.staff) {
-        items.add(
-          PopupMenuItem<_StaffChoice>(
-            value: _StaffChoice.staff(staff),
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const CircleAvatar(
-                backgroundColor: AppColors.yellowLight,
-                foregroundColor: AppColors.yellowDark,
-                child: Icon(Icons.person_outline_rounded),
-              ),
-              title: Text(
-                staff.name?.trim().isNotEmpty == true
-                    ? staff.name!.trim()
-                    : 'Unnamed staff',
-                style: const TextStyle(
-                  color: AppColors.yellowDark,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              subtitle: Text(
-                staff.designation?.trim().isNotEmpty == true
-                    ? staff.designation!.trim()
-                    : 'Staff member',
-                style: const TextStyle(color: AppColors.yellowDark),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    items
-      ..add(const PopupMenuDivider())
-      ..add(
-        const PopupMenuItem<_StaffChoice>(
-          value: _StaffChoice.action(_StaffAction.logout),
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.logout_rounded, color: AppColors.error),
-            title: Text('Logout', style: TextStyle(color: AppColors.error)),
-          ),
-        ),
-      );
-    return items;
-  }
-
   Future<void> _logout() async {
     if (Get.isRegistered<LocalStorageService>()) {
       final storage = Get.find<LocalStorageService>();
@@ -330,6 +224,165 @@ class _StaffMenuState extends State<StaffMenu>
     }
     await _controller.clearSelection();
     Get.offAllNamed(AppRoutes.login);
+  }
+}
+
+class _StaffPickerDialog extends StatefulWidget {
+  const _StaffPickerDialog({required this.controller});
+
+  final StaffController controller;
+
+  @override
+  State<_StaffPickerDialog> createState() => _StaffPickerDialogState();
+}
+
+class _StaffPickerDialogState extends State<_StaffPickerDialog> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<StaffData> get _filteredStaff {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return widget.controller.staff.toList();
+
+    return widget.controller.staff.where((staff) {
+      final id = staff.id?.toString() ?? '';
+      final userId = staff.userId?.trim().toLowerCase() ?? '';
+      final name = staff.name?.trim().toLowerCase() ?? '';
+      return id.contains(query) ||
+          userId.contains(query) ||
+          name.contains(query);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final error = widget.controller.errorMessage.value;
+    final filteredStaff = _filteredStaff;
+
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.white,
+      title: const Text(
+        'Select staff',
+        style: TextStyle(
+          color: AppColors.yellowDark,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      content: SizedBox(
+        width: 360,
+        height: 420,
+        child: Column(
+          children: [
+            TextField(
+              key: const Key('staff-search-field'),
+              controller: _searchController,
+              autofocus: true,
+              onChanged: (value) => setState(() => _query = value),
+              decoration: InputDecoration(
+                hintText: 'Search by staff ID or name',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: error != null
+                  ? Center(
+                      child: ListTile(
+                        onTap: () => Navigator.pop(
+                          context,
+                          const _StaffChoice.action(_StaffAction.retry),
+                        ),
+                        leading: const Icon(Icons.refresh_rounded),
+                        title: const Text('Retry'),
+                        subtitle: Text(
+                          error,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                  : filteredStaff.isEmpty
+                  ? Center(
+                      child: Text(
+                        widget.controller.staff.isEmpty
+                            ? 'No staff members found.'
+                            : 'No staff matches your search.',
+                        style: const TextStyle(color: AppColors.yellowDark),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: filteredStaff.length,
+                      itemBuilder: (context, index) {
+                        final staff = filteredStaff[index];
+                        final designation =
+                            staff.designation?.trim().isNotEmpty == true
+                            ? staff.designation!.trim()
+                            : 'Staff member';
+                        final staffId = staff.id?.toString();
+                        return ListTile(
+                          onTap: () =>
+                              Navigator.pop(context, _StaffChoice.staff(staff)),
+                          leading: const CircleAvatar(
+                            backgroundColor: AppColors.yellowLight,
+                            foregroundColor: AppColors.yellowDark,
+                            child: Icon(Icons.person_outline_rounded),
+                          ),
+                          title: Text(
+                            staff.name?.trim().isNotEmpty == true
+                                ? staff.name!.trim()
+                                : 'Unnamed staff',
+                            style: const TextStyle(
+                              color: AppColors.yellowDark,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            staffId == null
+                                ? designation
+                                : 'ID: $staffId  •  $designation',
+                            style: const TextStyle(color: AppColors.yellowDark),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton.icon(
+          onPressed: () => Navigator.pop(
+            context,
+            const _StaffChoice.action(_StaffAction.logout),
+          ),
+          icon: const Icon(Icons.logout_rounded, color: AppColors.error),
+          label: const Text('Logout', style: TextStyle(color: AppColors.error)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
   }
 }
 

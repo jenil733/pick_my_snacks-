@@ -43,6 +43,28 @@ void main() {
     expect(controller.isLoadingTables.value, isFalse);
   });
 
+  test('refreshes tables every time the table screen is opened', () async {
+    final repository = _CountingTableRepository();
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      GetTablesUseCase(repository),
+    );
+
+    controller.selectFlow(PosFlow.kot);
+    await Future<void>.delayed(Duration.zero);
+    expect(repository.requestCount, 1);
+
+    controller.selectFlow(PosFlow.billing);
+    controller.selectFlow(PosFlow.kot);
+    await Future<void>.delayed(Duration.zero);
+    expect(repository.requestCount, 2);
+  });
+
   test('loads occupied table status and blocks taking that table', () async {
     final response = TableStatusResponse.fromJson({
       'status': true,
@@ -134,6 +156,16 @@ class _FakeTableRepository implements TableRepository {
         TableData(id: 11, branchId: 1, tableId: 3),
       ],
     );
+  }
+}
+
+class _CountingTableRepository implements TableRepository {
+  int requestCount = 0;
+
+  @override
+  Future<TableListResponse> getTables() async {
+    requestCount++;
+    return const TableListResponse(status: true, data: []);
   }
 }
 

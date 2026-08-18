@@ -108,6 +108,35 @@ void main() {
     expect(find.text('Vikram'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('filters staff by ID and name', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = await LocalStorageService.initialize();
+    Get.put(
+      StaffController(GetStaffUseCase(_FakeStaffRepository()), storage),
+      permanent: true,
+    );
+
+    await tester.pumpWidget(
+      const GetMaterialApp(home: Scaffold(body: StaffMenu())),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Staff'));
+    await tester.pumpAndSettle();
+
+    final searchField = find.byKey(const Key('staff-search-field'));
+    expect(searchField, findsOneWidget);
+
+    await tester.enterText(searchField, '7');
+    await tester.pump();
+    expect(find.text('Asha'), findsOneWidget);
+    expect(find.text('Vikram'), findsNothing);
+
+    await tester.enterText(searchField, 'vik');
+    await tester.pump();
+    expect(find.text('Asha'), findsNothing);
+    expect(find.text('Vikram'), findsOneWidget);
+  });
 }
 
 class _FakeStaffRepository implements StaffRepository {
