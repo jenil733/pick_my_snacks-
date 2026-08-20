@@ -57,77 +57,97 @@ class CartPanel extends StatelessWidget {
                       border: Border.all(color: AppColors.border),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                    child: Column(
                       children: [
-                        if (controller.flow.value == PosFlow.kot ||
-                            controller.flow.value == PosFlow.takeAway) ...[
-                          Tooltip(
-                            message: controller.flow.value == PosFlow.takeAway
-                                ? 'Include ${item.product.name} in Kitchen Bill'
-                                : 'Send ${item.product.name} to kitchen',
-                            child: Checkbox(
-                              value: controller.isKitchenItemSelected(item),
-                              onChanged: (value) => controller
-                                  .setKitchenItemSelected(item, value ?? false),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                        ProductThumbnail(path: item.product.image, size: 52),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            item.product.name,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextHelper.bodySemiBold,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
                         Row(
-                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SoftIconButton(
-                              icon: Icons.remove,
-                              onTap: () => controller.decrement(item),
-                              color: AppColors.textSecondary,
-                              size: 28,
+                            if (controller.flow.value == PosFlow.kot ||
+                                controller.flow.value == PosFlow.takeAway) ...[
+                              Tooltip(
+                                message:
+                                    controller.flow.value == PosFlow.takeAway
+                                    ? 'Include ${item.product.name} in Kitchen Bill'
+                                    : 'Send ${item.product.name} to kitchen',
+                                child: Checkbox(
+                                  value: controller.isKitchenItemSelected(item),
+                                  onChanged: (value) =>
+                                      controller.setKitchenItemSelected(
+                                        item,
+                                        value ?? false,
+                                      ),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            ProductThumbnail(
+                              path: item.product.image,
+                              size: 52,
                             ),
-                            EditableItemAmount(
-                              controller: controller,
-                              item: item,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                item.product.name,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextHelper.bodySemiBold,
+                              ),
                             ),
-                            SoftIconButton(
-                              icon: Icons.add,
-                              onTap: () => controller.increment(item),
-                              size: 28,
+                            const SizedBox(width: 10),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SoftIconButton(
+                                  icon: Icons.remove,
+                                  onTap: () => controller.decrement(item),
+                                  color: AppColors.textSecondary,
+                                  size: 28,
+                                ),
+                                EditableItemAmount(
+                                  controller: controller,
+                                  item: item,
+                                ),
+                                SoftIconButton(
+                                  icon: Icons.add,
+                                  onTap: () => controller.increment(item),
+                                  size: 28,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 72,
+                              child: Column(
+                                children: [
+                                  SoftIconButton(
+                                    icon: Icons.delete_outline,
+                                    onTap: () => _deleteItem(context, item),
+                                    color: AppColors.delete,
+                                    size: 28,
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    money(item.total),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextHelper.bodySemiBold,
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 72,
-                          child: Column(
-                            children: [
-                              SoftIconButton(
-                                icon: Icons.delete_outline,
-                                onTap: () => _deleteItem(context, item),
-                                color: AppColors.delete,
-                                size: 28,
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                money(item.total),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                                style: TextHelper.bodySemiBold,
-                              ),
-                            ],
+                        if (controller.flow.value == PosFlow.kot ||
+                            controller.flow.value == PosFlow.takeAway) ...[
+                          const SizedBox(height: 9),
+                          ExtraItemNoteField(
+                            key: ValueKey('extra-${item.uniqueId}'),
+                            controller: controller,
+                            item: item,
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   );

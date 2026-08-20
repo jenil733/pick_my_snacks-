@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:pick_my_snacks/firebase_options.dart';
 import 'package:pick_my_snacks/src/core/const/appcolors.dart';
 import 'package:pick_my_snacks/src/core/services/fcm_token_service.dart';
@@ -62,9 +63,21 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: AppColors.background,
+        textTheme: GoogleFonts.poppinsTextTheme(),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primaryDark,
+            foregroundColor: AppColors.background,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
       ),
       initialRoute: initialRoute,
+
       getPages: AppRoutes.pages,
+      builder: (context, child) => SafeArea(top: false, child: child!),
     );
   }
 }

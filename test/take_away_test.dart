@@ -111,7 +111,12 @@ void main() {
       customerPhone: 'ans',
       paymentMode: 'cash',
       products: [
-        SaveOrderProductRequest(productId: 4, quantity: 0.450, unit: 'kg'),
+        SaveOrderProductRequest(
+          productId: 4,
+          quantity: 0.450,
+          unit: 'kg',
+          note: 'extra salt',
+        ),
         SaveOrderProductRequest(productId: 5, quantity: 1, unit: 'pcs'),
       ],
     );
@@ -126,8 +131,10 @@ void main() {
       'status': '',
       'products[0][product_id]': 4,
       'products[0][qty]': '0.45kg',
+      'products[0][note]': 'extra salt',
       'products[1][product_id]': 5,
       'products[1][qty]': '1pcs',
+      'products[1][note]': '',
       'discount_type': '',
       'discount_value': '',
       'is_kot': 1,
@@ -418,6 +425,7 @@ void main() {
     controller.addProduct(burger);
     controller.addProduct(tea);
     controller.setItemAmount(controller.cart.first, 0.45);
+    controller.updateItemNotes(controller.cart.first, 'extra salt');
     controller.setKitchenItemSelected(controller.cart.first, true);
     controller.takeAwayCustomerName.value = 'Anu';
     controller.takeAwayCustomerPhone.value = '9876543210';
@@ -429,6 +437,7 @@ void main() {
     expect(repository.requests.single.products, hasLength(1));
     expect(repository.requests.single.products.single.productId, 4);
     expect(repository.requests.single.products.single.apiQuantity, '0.45kg');
+    expect(repository.requests.single.products.single.note, 'extra salt');
     expect(repository.requests.single.customerName, 'Anu');
     expect(repository.requests.single.customerPhone, '9876543210');
     expect(controller.savedOrderNumber.value, 'TA-1001');

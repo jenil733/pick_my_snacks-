@@ -74,7 +74,7 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> {
                   : widget.controller.flow.value == PosFlow.takeAway
                   ? 'Take Away'
                   : 'Billing',
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             ),
           ),
           actions: [

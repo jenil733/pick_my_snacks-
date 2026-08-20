@@ -195,6 +195,7 @@ class KotTablesView extends StatelessWidget {
     controller.takeKotTable(
       tableNumber,
       staffName: staffController?.selectedStaffName ?? 'Staff',
+      staffId: staffController?.selectedStaff.value?.id,
     );
     onOpenOrder?.call();
   }
@@ -274,7 +275,7 @@ class _ProcessingTableDetailsView extends StatelessWidget {
                 ),
                 _DetailRow(
                   label: 'Status',
-                  value: order.status ?? 'Processing',
+                  value: order.status?.capitalize ?? 'Processing',
                 ),
                 _DetailRow(label: 'Items', value: '${products.length}'),
               ],
@@ -310,7 +311,14 @@ class _ProcessingTableDetailsView extends StatelessWidget {
                           foregroundColor: AppColors.yellowDark,
                           child: Text('${product.quantity ?? 0}'),
                         ),
-                        title: Text(product.productName ?? 'Unnamed product'),
+                        title: Text(
+                          product.productName ?? 'Unnamed product',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Colors.black,
+                                fontWeight: .w700,
+                              ),
+                        ),
                         subtitle: Text(product.unit ?? ''),
                         trailing: Text(
                           '${product.quantity ?? 0} x',

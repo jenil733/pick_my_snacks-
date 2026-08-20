@@ -90,7 +90,7 @@ class KitchenPrinter {
       );
       final note = item.notes.trim();
       if (note.isNotEmpty) {
-        bytes.addAll(generator.text('  NOTE: $note', styles: normal));
+        bytes.addAll(generator.text('  EXTRA: $note', styles: normal));
       }
     }
 

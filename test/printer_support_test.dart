@@ -87,7 +87,7 @@ void main() {
       expect(printable, contains('Qty'));
       expect(printable, contains('MASALA SANDWICH'));
       expect(printable, contains('1PC'));
-      expect(printable, contains('NOTE: No onion'));
+      expect(printable, contains('EXTRA: No onion'));
       expect(printable, contains('Staff: Arun'));
       expect(printable, isNot(contains('149.75')));
       expect(printable.toLowerCase(), isNot(contains('payment')));
@@ -131,7 +131,7 @@ void main() {
       expect(printable, contains('TAKE AWAY MIXTURE'));
       expect(printable, contains('250G'));
       expect(printable, contains('3'));
-      expect(printable, contains('NOTE: Pack separately'));
+      expect(printable, contains('EXTRA: Pack separately'));
       expect(printable, isNot(contains('Rate')));
       expect(printable, isNot(contains('Amount')));
       expect(printable, isNot(contains('87.50')));
@@ -151,6 +151,7 @@ void main() {
             image: '',
           ),
           quantity: 2,
+          notes: 'Extra spicy',
         ),
       ],
       subtotal: 175,
@@ -182,6 +183,7 @@ void main() {
     expect(printable, isNot(contains('Grand Total')));
     expect(printable, isNot(contains('183.75')));
     expect(printable, isNot(contains('GST')));
+    expect(printable, isNot(contains('Extra spicy')));
     final lines = printable.split('\n');
     final productLine = lines.indexWhere(
       (line) => line.contains('PARCEL SNACK'),

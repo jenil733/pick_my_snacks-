@@ -10,6 +10,7 @@ import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_adjustme
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/common_widgets.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/payment_method_dropdown.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/take_away_orders_panel.dart';
+import 'package:pick_my_snacks/src/printing/kitchen_printer.dart';
 import 'package:pick_my_snacks/src/printing/printer_manager.dart';
 import 'package:pick_my_snacks/src/services/receipt_printer_service.dart';
 
@@ -209,11 +210,16 @@ class BillSummaryPanel extends StatelessWidget {
                 onPressed:
                     controller.cart.isEmpty ||
                         controller.isSavingTakeAwayHold.value ||
-                        controller.takeAwayHoldOrderId.value != null
+                        (controller.takeAwayHoldOrderId.value != null &&
+                            controller.lastKitchenOrderItems.isEmpty)
                     ? null
                     : () => sendTakeAwayKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
-                label: const Text('Kitchen Bill'),
+                label: Text(
+                  controller.takeAwayHoldOrderId.value != null
+                      ? 'Retry Kitchen Bill'
+                      : 'Kitchen Bill',
+                ),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.warning,
                   disabledBackgroundColor: AppColors.divider,
@@ -286,7 +292,8 @@ class BillSummaryPanel extends StatelessWidget {
             Expanded(
               child: FilledButton.icon(
                 onPressed:
-                    !controller.hasSelectedPendingKitchenItems ||
+                    (!controller.hasSelectedPendingKitchenItems &&
+                            !controller.hasKitchenOrderAwaitingPrint) ||
                         controller.isSavingKotOrder.value
                     ? null
                     : () => sendKotBill(context, controller),
@@ -294,6 +301,9 @@ class BillSummaryPanel extends StatelessWidget {
                 label: Text(
                   controller.isSavingKotOrder.value
                       ? 'Sending...'
+                      : controller.hasKitchenOrderAwaitingPrint &&
+                            !controller.hasSelectedPendingKitchenItems
+                      ? 'Retry Kitchen Bill'
                       : 'Kitchen Bill',
                 ),
                 style: FilledButton.styleFrom(
@@ -420,63 +430,77 @@ class BillSummaryPanel extends StatelessWidget {
   Widget _billItemRow(BuildContext context, CartItem item) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
         children: [
-          if (controller.flow.value == PosFlow.takeAway) ...[
-            Tooltip(
-              message: 'Include ${item.product.name} in Kitchen Bill',
-              child: Checkbox(
-                value: controller.isKitchenItemSelected(item),
-                onChanged: (value) =>
-                    controller.setKitchenItemSelected(item, value ?? false),
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
-          Expanded(
-            child: Text(
-              item.product.name,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: TextHelper.captionText,
-            ),
-          ),
-          const SizedBox(width: 6),
-          BillQuantityControl(controller: controller, item: item),
-          const SizedBox(width: 6),
-          SizedBox(
-            width: 62,
-            child: Column(
-              children: [
-                IconButton(
-                  tooltip: 'Delete ${item.product.name}',
-                  onPressed:
-                      controller.isRemovingKotProduct.value ||
-                          controller.isRemovingKotQuantity.value
-                      ? null
-                      : () => _deleteBillItem(context, item),
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 30,
-                    height: 30,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (controller.flow.value == PosFlow.kot ||
+                  controller.flow.value == PosFlow.takeAway) ...[
+                Tooltip(
+                  message: 'Include ${item.product.name} in Kitchen Bill',
+                  child: Checkbox(
+                    value: controller.isKitchenItemSelected(item),
+                    onChanged: (value) =>
+                        controller.setKitchenItemSelected(item, value ?? false),
+                    visualDensity: VisualDensity.compact,
                   ),
-                  padding: EdgeInsets.zero,
-                  color: AppColors.delete,
-                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  money(item.total),
-                  maxLines: 1,
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: Text(
+                  item.product.name,
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
                   style: TextHelper.captionText,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 6),
+              BillQuantityControl(controller: controller, item: item),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 62,
+                child: Column(
+                  children: [
+                    IconButton(
+                      tooltip: 'Delete ${item.product.name}',
+                      onPressed:
+                          controller.isRemovingKotProduct.value ||
+                              controller.isRemovingKotQuantity.value
+                          ? null
+                          : () => _deleteBillItem(context, item),
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 30,
+                        height: 30,
+                      ),
+                      padding: EdgeInsets.zero,
+                      color: AppColors.delete,
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      money(item.total),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextHelper.captionText,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
+          if (controller.flow.value == PosFlow.kot ||
+              controller.flow.value == PosFlow.takeAway) ...[
+            const SizedBox(height: 7),
+            ExtraItemNoteField(
+              key: ValueKey('bill-extra-${item.uniqueId}'),
+              controller: controller,
+              item: item,
+            ),
+          ],
         ],
       ),
     );
@@ -770,9 +794,18 @@ Future<bool> sendKotBill(
   final hasCustomerDetails = await _requireCustomerDetails(context, controller);
   if (!hasCustomerDetails || !context.mounted) return false;
 
-  final items = selectedOnly
-      ? controller.selectedPendingKitchenItems
-      : controller.pendingKitchenItems;
+  final newItems =
+      (selectedOnly
+              ? controller.selectedPendingKitchenItems
+              : controller.pendingKitchenItems)
+          .map((item) => item.copy())
+          .toList(growable: false);
+  final retryItems = controller.hasKitchenOrderAwaitingPrint
+      ? controller.lastKitchenOrderItems
+            .map((item) => item.copy())
+            .toList(growable: false)
+      : <CartItem>[];
+  final items = <CartItem>[...retryItems, ...newItems];
   if (items.isEmpty) {
     if (selectedOnly) {
       _showPrinterToast(context, 'Select at least one new product to send.');
@@ -788,7 +821,7 @@ Future<bool> sendKotBill(
   final orderSaved = await controller.saveKitchenOrder(
     staffId: staff?.id,
     selectedOnly: selectedOnly,
-    prepareForKitchenPrint: false,
+    prepareForKitchenPrint: true,
   );
   if (!context.mounted) return false;
   if (!orderSaved) {
@@ -798,7 +831,17 @@ Future<bool> sendKotBill(
     );
     return false;
   }
-  AppToast.show(context, 'KOT bill sent successfully.');
+  final printableItems = controller.lastKitchenOrderItems
+      .map((item) => item.copy())
+      .toList(growable: false);
+  final printed = await _printKitchenTicket(
+    context,
+    items: printableItems,
+    orderNumber: controller.savedOrderNumber.value ?? '',
+    tableNumber: controller.activeTableNumber.value?.toString(),
+    staffName: staff?.name,
+  );
+  if (printed) controller.confirmKitchenOrderPrinted();
   return true;
 }
 
@@ -817,6 +860,26 @@ Future<bool> sendTakeAwayKotBill(
   final staffController = Get.isRegistered<StaffController>()
       ? Get.find<StaffController>()
       : null;
+  if (controller.takeAwayHoldOrderId.value != null &&
+      controller.lastKitchenOrderItems.isNotEmpty) {
+    final printed = await _printKitchenTicket(
+      context,
+      items: controller.lastKitchenOrderItems
+          .map((item) => item.copy())
+          .toList(growable: false),
+      orderNumber: controller.savedOrderNumber.value ?? '',
+      staffName: staffController?.selectedStaff.value?.name,
+      customerName: controller.takeAwayCustomerName.value,
+      customerPhone: controller.takeAwayCustomerPhone.value,
+      title: 'TAKE AWAY KITCHEN',
+    );
+    if (printed) controller.confirmKitchenOrderPrinted();
+    return true;
+  }
+  final selectedItems = controller.cart
+      .where(controller.isKitchenItemSelected)
+      .map((item) => item.copy())
+      .toList(growable: false);
   final saved = await controller.saveTakeAwayKitchenBill(
     staffId: staffController?.selectedStaff.value?.id,
   );
@@ -829,8 +892,64 @@ Future<bool> sendTakeAwayKotBill(
     );
     return false;
   }
-  AppToast.show(context, 'Take-away KOT bill sent successfully.');
+  final printed = await _printKitchenTicket(
+    context,
+    items: selectedItems,
+    orderNumber: controller.savedOrderNumber.value ?? '',
+    staffName: staffController?.selectedStaff.value?.name,
+    customerName: controller.takeAwayCustomerName.value,
+    customerPhone: controller.takeAwayCustomerPhone.value,
+    title: 'TAKE AWAY KITCHEN',
+  );
+  if (printed) controller.confirmKitchenOrderPrinted();
   return true;
+}
+
+Future<bool> _printKitchenTicket(
+  BuildContext context, {
+  required List<CartItem> items,
+  required String orderNumber,
+  String title = 'KITCHEN ORDER',
+  String? tableNumber,
+  String? staffName,
+  String? customerName,
+  String? customerPhone,
+}) async {
+  if (!Get.isRegistered<PrinterManager>()) {
+    _showPrinterToast(
+      context,
+      'Kitchen printer is not configured. Order saved.',
+    );
+    return false;
+  }
+
+  try {
+    await Get.find<PrinterManager>().printKitchen(
+      KitchenPrintJob(
+        items: items,
+        orderNumber: orderNumber,
+        paperSize: ReceiptPaperSize.mm58,
+        title: title,
+        tableNumber: tableNumber,
+        staffName: staffName,
+        customerName: customerName,
+        customerPhone: customerPhone,
+      ),
+    );
+    if (!context.mounted) return true;
+    AppToast.show(context, 'Kitchen Bill printed.');
+    return true;
+  } on PrinterManagerException catch (error) {
+    if (!context.mounted) return false;
+    AppToast.dismiss();
+    _showPrinterToast(context, '${error.message} Order saved.');
+    return false;
+  } catch (_) {
+    if (!context.mounted) return false;
+    AppToast.dismiss();
+    _showPrinterToast(context, 'Kitchen printer is unavailable. Order saved.');
+    return false;
+  }
 }
 
 Future<bool> printTakeAwayBill(
@@ -1115,11 +1234,21 @@ Future<void> closeKotBill(
     return;
   }
   if (controller.pendingKitchenItems.isNotEmpty) {
-    _showPrinterToast(
-      context,
-      'Send pending products through the Kitchen Bill before closing.',
+    final staffController = Get.isRegistered<StaffController>()
+        ? Get.find<StaffController>()
+        : null;
+    final prepared = await controller.prepareKotOrderForCompletion(
+      staffId: staffController?.selectedStaff.value?.id,
     );
-    return;
+    if (!context.mounted) return;
+    if (!prepared) {
+      _showPrinterToast(
+        context,
+        controller.kotOrderError.value ??
+            'Unable to save pending products before closing.',
+      );
+      return;
+    }
   }
   await printReceipt(context, controller, recoverMissingKotHold: false);
 }

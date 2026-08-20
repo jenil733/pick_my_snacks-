@@ -45,6 +45,7 @@ class TakeAwayHoldRequest {
       final product = products[index];
       fields['products[$index][product_id]'] = product.productId;
       fields['products[$index][qty]'] = product.apiQuantity;
+      fields['products[$index][note]'] = product.note.trim();
     }
     return fields;
   }

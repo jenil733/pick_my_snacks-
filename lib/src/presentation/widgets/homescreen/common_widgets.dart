@@ -263,6 +263,66 @@ class EditableItemAmount extends StatelessWidget {
   }
 }
 
+class ExtraItemNoteField extends StatefulWidget {
+  const ExtraItemNoteField({
+    required this.controller,
+    required this.item,
+    super.key,
+  });
+
+  final HomeController controller;
+  final CartItem item;
+
+  @override
+  State<ExtraItemNoteField> createState() => _ExtraItemNoteFieldState();
+}
+
+class _ExtraItemNoteFieldState extends State<ExtraItemNoteField> {
+  late final TextEditingController _textController;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.item.notes);
+    _focusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant ExtraItemNoteField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.uniqueId != widget.item.uniqueId ||
+        (_textController.text != widget.item.notes && !_focusNode.hasFocus)) {
+      _textController.text = widget.item.notes;
+    }
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _textController,
+      focusNode: _focusNode,
+      onChanged: (value) =>
+          widget.controller.updateItemNotes(widget.item, value),
+      textInputAction: TextInputAction.done,
+      maxLines: 1,
+      decoration: const InputDecoration(
+        hintText: 'Extra',
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        border: OutlineInputBorder(),
+      ),
+    );
+  }
+}
+
 Future<void> showItemAmountDialog(
   BuildContext context,
   HomeController controller,

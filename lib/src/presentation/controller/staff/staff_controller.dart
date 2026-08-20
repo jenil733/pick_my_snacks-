@@ -15,6 +15,8 @@ class StaffController extends GetxController {
   final selectedStaff = Rxn<StaffData>();
   final isLoading = false.obs;
   final errorMessage = RxnString();
+  StaffData? _staffBeforeTemporarySelection;
+  bool _hasTemporarySelection = false;
 
   String get selectedStaffId {
     final id = selectedStaff.value?.id;
@@ -35,11 +37,31 @@ class StaffController extends GetxController {
   }
 
   Future<void> selectStaff(StaffData value) async {
-    selectedStaff.value = value;
+    if (_hasTemporarySelection) {
+      selectedStaff.value = value;
+      return;
+    } else {
+      selectedStaff.value = value;
+    }
     final id = value.id;
     if (_storage != null && id != null) {
       await _storage.setInt(LocalStorageService.selectedStaffIdKey, id);
     }
+  }
+
+  void selectTemporaryStaff(StaffData value) {
+    if (!_hasTemporarySelection) {
+      _staffBeforeTemporarySelection = selectedStaff.value;
+      _hasTemporarySelection = true;
+    }
+    selectedStaff.value = value;
+  }
+
+  void restoreStaffBeforeTemporarySelection() {
+    if (!_hasTemporarySelection) return;
+    selectedStaff.value = _staffBeforeTemporarySelection;
+    _staffBeforeTemporarySelection = null;
+    _hasTemporarySelection = false;
   }
 
   Future<void> getStaff() async {
@@ -88,6 +110,8 @@ class StaffController extends GetxController {
   }
 
   Future<void> clearSelection() async {
+    _staffBeforeTemporarySelection = null;
+    _hasTemporarySelection = false;
     selectedStaff.value = null;
     await _storage?.remove(LocalStorageService.selectedStaffIdKey);
   }

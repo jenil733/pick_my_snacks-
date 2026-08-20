@@ -65,12 +65,14 @@ class SaveOrderProductRequest {
     required this.quantity,
     this.unitValue,
     this.unit = '',
+    this.note = '',
   });
 
   final int productId;
   final num quantity;
   final num? unitValue;
   final String unit;
+  final String note;
 
   String get apiQuantity {
     final normalizedUnit = _normalizedQuantityUnit(unit);
@@ -82,6 +84,7 @@ class SaveOrderProductRequest {
     'quantity': quantity,
     if (unitValue != null) 'unit_value': unitValue,
     if (unit.trim().isNotEmpty) 'unit': unit.trim(),
+    if (note.trim().isNotEmpty) 'note': note.trim(),
   };
 }
 

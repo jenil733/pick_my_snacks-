@@ -8,13 +8,13 @@ class removequantity {
   removequantity.fromJson(Map<String, dynamic> json) {
     status = json['status'];
     message = json['message'];
-    data = json['data'] != null ? new Data.fromJson(json['data']) : null;
+    data = json['data'] != null ? Data.fromJson(json['data']) : null;
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['status'] = this.status;
-    data['message'] = this.message;
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['status'] = status;
+    data['message'] = message;
     if (this.data != null) {
       data['data'] = this.data!.toJson();
     }
@@ -30,17 +30,17 @@ class Data {
 
   Data.fromJson(Map<String, dynamic> json) {
     product =
-        json['product'] != null ? new Product.fromJson(json['product']) : null;
-    order = json['order'] != null ? new Order.fromJson(json['order']) : null;
+        json['product'] != null ? Product.fromJson(json['product']) : null;
+    order = json['order'] != null ? Order.fromJson(json['order']) : null;
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    if (this.product != null) {
-      data['product'] = this.product!.toJson();
+    final Map<String, dynamic> data = <String, dynamic>{};
+    if (product != null) {
+      data['product'] = product!.toJson();
     }
-    if (this.order != null) {
-      data['order'] = this.order!.toJson();
+    if (order != null) {
+      data['order'] = order!.toJson();
     }
     return data;
   }
@@ -78,15 +78,15 @@ class Product {
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['detail_id'] = this.detailId;
-    data['product_id'] = this.productId;
-    data['product_name'] = this.productName;
-    data['previous_quantity'] = this.previousQuantity;
-    data['removed_quantity'] = this.removedQuantity;
-    data['remaining_quantity'] = this.remainingQuantity;
-    data['remaining_unit_value'] = this.remainingUnitValue;
-    data['row_total'] = this.rowTotal;
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['detail_id'] = detailId;
+    data['product_id'] = productId;
+    data['product_name'] = productName;
+    data['previous_quantity'] = previousQuantity;
+    data['removed_quantity'] = removedQuantity;
+    data['remaining_quantity'] = remainingQuantity;
+    data['remaining_unit_value'] = remainingUnitValue;
+    data['row_total'] = rowTotal;
     return data;
   }
 }
@@ -134,26 +134,26 @@ class Order {
     if (json['products'] != null) {
       products = <Products>[];
       json['products'].forEach((v) {
-        products!.add(new Products.fromJson(v));
+        products!.add(Products.fromJson(v));
       });
     }
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['id'] = this.id;
-    data['order_id'] = this.orderId;
-    data['table_id'] = this.tableId;
-    data['branch_id'] = this.branchId;
-    data['staff_id'] = this.staffId;
-    data['subtotal'] = this.subtotal;
-    data['gst'] = this.gst;
-    data['discount'] = this.discount;
-    data['charge'] = this.charge;
-    data['total'] = this.total;
-    data['status'] = this.status;
-    if (this.products != null) {
-      data['products'] = this.products!.map((v) => v.toJson()).toList();
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['id'] = id;
+    data['order_id'] = orderId;
+    data['table_id'] = tableId;
+    data['branch_id'] = branchId;
+    data['staff_id'] = staffId;
+    data['subtotal'] = subtotal;
+    data['gst'] = gst;
+    data['discount'] = discount;
+    data['charge'] = charge;
+    data['total'] = total;
+    data['status'] = status;
+    if (products != null) {
+      data['products'] = products!.map((v) => v.toJson()).toList();
     }
     return data;
   }
@@ -215,23 +215,23 @@ class Products {
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['id'] = this.id;
-    data['order_id'] = this.orderId;
-    data['product_id'] = this.productId;
-    data['product_name'] = this.productName;
-    data['product_code'] = this.productCode;
-    data['variant_code'] = this.variantCode;
-    data['mrp'] = this.mrp;
-    data['price'] = this.price;
-    data['quantity'] = this.quantity;
-    data['unit_value'] = this.unitValue;
-    data['unit'] = this.unit;
-    data['tax'] = this.tax;
-    data['row_total'] = this.rowTotal;
-    data['is_kot'] = this.isKot;
-    data['created_at'] = this.createdAt;
-    data['updated_at'] = this.updatedAt;
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['id'] = id;
+    data['order_id'] = orderId;
+    data['product_id'] = productId;
+    data['product_name'] = productName;
+    data['product_code'] = productCode;
+    data['variant_code'] = variantCode;
+    data['mrp'] = mrp;
+    data['price'] = price;
+    data['quantity'] = quantity;
+    data['unit_value'] = unitValue;
+    data['unit'] = unit;
+    data['tax'] = tax;
+    data['row_total'] = rowTotal;
+    data['is_kot'] = isKot;
+    data['created_at'] = createdAt;
+    data['updated_at'] = updatedAt;
     return data;
   }
 }

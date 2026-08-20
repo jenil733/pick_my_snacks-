@@ -211,10 +211,14 @@ class ApiService {
   }
 
   static bool _isExpectedKotRecoveryResponse(DioException error) {
+    final requestPath = error.requestOptions.path.toLowerCase();
+    if (error.response?.statusCode == 404 &&
+        requestPath.contains('kot_table_status')) {
+      return true;
+    }
     final data = error.response?.data;
     if (data is! Map) return false;
     final message = data['message']?.toString().trim().toLowerCase() ?? '';
-    final requestPath = error.requestOptions.path.toLowerCase();
     if (error.response?.statusCode == 404 &&
         requestPath.contains('delete_hold_bill/') &&
         message.contains('hold bill') &&

@@ -8,6 +8,7 @@ import 'package:pick_my_snacks/src/core/const/appimages.dart';
 import 'package:pick_my_snacks/src/data/model/get_product.dart' as api_model;
 import 'package:pick_my_snacks/src/data/model/get_hold.dart';
 import 'package:pick_my_snacks/src/data/model/get_resume.dart';
+import 'package:pick_my_snacks/src/data/model/get_staff.dart';
 import 'package:pick_my_snacks/src/data/model/get_table.dart';
 import 'package:pick_my_snacks/src/data/model/get_table_status.dart';
 import 'package:pick_my_snacks/src/data/model/get_saveorder.dart';
@@ -81,7 +82,7 @@ class CartItem {
   int quantity;
   final String? scannedWeightCode;
   double? manualWeightKg;
-  final String notes;
+  String notes;
   final double? backendRowTotal;
   final List<KotProductReference> kotProductReferences;
 
@@ -243,10 +244,12 @@ class KotTableOrder {
     required this.staffName,
     required this.openedAt,
     required this.items,
+    this.staffId,
   });
 
   final int tableNumber;
   final String staffName;
+  final int? staffId;
   final DateTime openedAt;
   final List<CartItem> items;
 
@@ -256,8 +259,20 @@ class KotTableOrder {
     return KotTableOrder(
       tableNumber: tableNumber,
       staffName: staffName,
+      staffId: staffId,
       openedAt: openedAt,
       items: value,
+    );
+  }
+
+  KotTableOrder copyWithStaff(StaffData staff) {
+    final name = staff.name?.trim();
+    return KotTableOrder(
+      tableNumber: tableNumber,
+      staffName: name?.isNotEmpty == true ? name! : 'Staff',
+      staffId: staff.id,
+      openedAt: openedAt,
+      items: items,
     );
   }
 }
@@ -485,6 +500,7 @@ class HomeController extends GetxController {
       selectedKotTableNumber.value = null;
       processingOrder.value = null;
       kotStage.value = KotStage.tables;
+      _restoreStaffAfterKotTable();
     }
 
     // Each POS flow owns a separate bill. Starting another flow must not carry
@@ -504,7 +520,11 @@ class HomeController extends GetxController {
     }
   }
 
-  void takeKotTable(int tableNumber, {required String staffName}) {
+  void takeKotTable(
+    int tableNumber, {
+    required String staffName,
+    int? staffId,
+  }) {
     if (tableStatuses[tableNumber]?.occupied == true) return;
     final existingOrder = tableOrders[tableNumber];
     if (existingOrder != null && existingOrder.itemCount > 0) return;
@@ -523,11 +543,13 @@ class HomeController extends GetxController {
     final order = KotTableOrder(
       tableNumber: tableNumber,
       staffName: staffName.trim().isEmpty ? 'Staff' : staffName.trim(),
+      staffId: staffId,
       openedAt: DateTime.now(),
       items: const [],
     );
     tableOrders[tableNumber] = order;
     activeTableNumber.value = tableNumber;
+    _useKotTableStaff(staffId: order.staffId, staffName: order.staffName);
     selectedKotTableNumber.value = null;
     processingOrder.value = null;
     flow.value = PosFlow.kot;
@@ -541,6 +563,7 @@ class HomeController extends GetxController {
     activeTableNumber.value = null;
     startNewBill();
     cart.assignAll(order.items.map((item) => item.copy()));
+    _useKotTableStaff(staffId: order.staffId, staffName: order.staffName);
     activeTableNumber.value = tableNumber;
     selectedKotTableNumber.value = null;
     processingOrder.value = null;
@@ -561,6 +584,7 @@ class HomeController extends GetxController {
     processingOrder.value = null;
     processingOrderError.value = null;
     kotStage.value = KotStage.tables;
+    _restoreStaffAfterKotTable();
     unawaited(refreshKotTables());
   }
 
@@ -574,13 +598,29 @@ class HomeController extends GetxController {
     processingOrder.value = null;
     processingOrderError.value = null;
     kotStage.value = KotStage.details;
-    if (!hasLocalOrder) {
-      final cachedOrder = processingOrders[tableNumber];
-      if (cachedOrder != null) {
-        processingOrder.value = cachedOrder;
-      } else {
-        await getProcessingOrder(tableNumber);
+    if (hasLocalOrder) {
+      final localOrder = tableOrders[tableNumber];
+      if (localOrder != null) {
+        _useKotTableStaff(
+          staffId: localOrder.staffId,
+          staffName: localOrder.staffName,
+        );
       }
+      return;
+    }
+
+    final cachedOrder = processingOrders[tableNumber];
+    if (cachedOrder != null) {
+      processingOrder.value = cachedOrder;
+    } else {
+      await getProcessingOrder(tableNumber);
+    }
+    final remoteOrder = processingOrder.value?.order;
+    if (remoteOrder != null) {
+      _useKotTableStaff(
+        staffId: remoteOrder.staffId,
+        staffName: remoteOrder.staffName,
+      );
     }
   }
 
@@ -686,6 +726,12 @@ class HomeController extends GetxController {
           .map((status) => status.tableId)
           .whereType<int>()
           .toSet();
+      final closedOnAnotherDevice = previouslyOccupied.difference(
+        occupiedTableNumbers,
+      );
+      if (closedOnAnotherDevice.isNotEmpty) {
+        _clearExternallyClosedKotTables(closedOnAnotherDevice);
+      }
       final tableNumbersToVerify = silent
           ? occupiedTableNumbers.where(
               (tableId) =>
@@ -707,6 +753,27 @@ class HomeController extends GetxController {
         processingOrderError.value = null;
         kotStage.value = KotStage.tables;
       }
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        final staleTableNumbers = <int>{
+          ...tableStatuses.values
+              .where((status) => status.occupied)
+              .map((status) => status.tableId)
+              .whereType<int>(),
+          ...processingOrders.keys,
+          ...submittedKitchenTables,
+        };
+        tableStatuses.clear();
+        _clearExternallyClosedKotTables(staleTableNumbers);
+        tableStatusError.value = null;
+        return;
+      }
+      if (!silent) {
+        tableStatuses.clear();
+        processingOrders.clear();
+        tableStatusError.value =
+            'Unable to load table status. Please try again.';
+      }
     } catch (_) {
       if (!silent) {
         tableStatuses.clear();
@@ -718,6 +785,39 @@ class HomeController extends GetxController {
       _isRefreshingTableStatuses = false;
       if (!silent) isLoadingTableStatuses.value = false;
     }
+  }
+
+  void _clearExternallyClosedKotTables(Set<int> tableNumbers) {
+    if (tableNumbers.isEmpty) return;
+    final currentTable = activeTableNumber.value;
+    final selectedTable = selectedKotTableNumber.value;
+    final currentScreenWasClosed =
+        (currentTable != null && tableNumbers.contains(currentTable)) ||
+        (selectedTable != null && tableNumbers.contains(selectedTable));
+
+    for (final tableId in tableNumbers) {
+      tableOrders.remove(tableId);
+      tableStatuses.remove(tableId);
+      processingOrders.remove(tableId);
+      submittedKitchenTables.remove(tableId);
+      deletedKitchenTables.add(tableId);
+      _kitchenSentQuantities.remove(tableId);
+      _kotHoldOrderIds.remove(tableId);
+      _kotOrdersNeedingReconciliation.remove(tableId);
+    }
+
+    if (!currentScreenWasClosed) return;
+    activeTableNumber.value = null;
+    selectedKotTableNumber.value = null;
+    processingOrder.value = null;
+    processingOrderError.value = null;
+    lastKitchenOrderItems.clear();
+    kitchenOrderAwaitingPrint.value = false;
+    kitchenOrderAwaitingPrintTable.value = null;
+    startNewBill();
+    flow.value = PosFlow.kot;
+    kotStage.value = KotStage.tables;
+    _restoreStaffAfterKotTable();
   }
 
   void _startTableStatusSync() {
@@ -774,9 +874,6 @@ class HomeController extends GetxController {
     if (useCase == null) return;
 
     final occupiedTables = tableNumbers.toSet();
-    processingOrders.removeWhere(
-      (tableNumber, _) => !occupiedTables.contains(tableNumber),
-    );
     await Future.wait(
       occupiedTables.map((tableNumber) async {
         try {
@@ -912,10 +1009,12 @@ class HomeController extends GetxController {
       staffName: order.staffName?.trim().isNotEmpty == true
           ? order.staffName!.trim()
           : 'Staff',
+      staffId: order.staffId,
       openedAt: DateTime.tryParse(order.createdAt ?? '') ?? DateTime.now(),
       items: items,
     );
     cart.assignAll(items.map((item) => item.copy()));
+    _useKotTableStaff(staffId: order.staffId, staffName: order.staffName);
     submittedKitchenTables.add(tableNumber);
     _kitchenSentQuantities[tableNumber] = {
       for (final item in items) item.uniqueId: item.quantity,
@@ -1012,10 +1111,12 @@ class HomeController extends GetxController {
     super.onInit();
     _startTableStatusSync();
     if (Get.isRegistered<StaffController>()) {
-      _staffSelectionWorker = ever(
-        Get.find<StaffController>().selectedStaff,
-        (_) => refreshOrderTotals(),
-      );
+      _staffSelectionWorker = ever(Get.find<StaffController>().selectedStaff, (
+        staff,
+      ) {
+        _updateActiveKotTableStaff(staff);
+        refreshOrderTotals();
+      });
     }
     if (_getProductsUseCase == null) {
       _loadPreviewData();
@@ -1746,13 +1847,15 @@ class HomeController extends GetxController {
       kotOrderError.value = 'Add at least one product to the bill.';
       return false;
     }
-    if (prepareForKitchenPrint && hasKitchenOrderAwaitingPrint) {
-      return true;
-    }
+    final awaitingPrintItems =
+        prepareForKitchenPrint && hasKitchenOrderAwaitingPrint
+        ? lastKitchenOrderItems.map((item) => item.copy()).toList()
+        : <CartItem>[];
     final pendingItems = selectedOnly
         ? selectedPendingKitchenItems
         : pendingKitchenItems;
     if (pendingItems.isEmpty) {
+      if (awaitingPrintItems.isNotEmpty) return true;
       kotOrderError.value = selectedOnly
           ? 'Select at least one new product to send.'
           : 'No new kitchen items to send.';
@@ -1782,6 +1885,7 @@ class HomeController extends GetxController {
                   quantity: item.orderQuantity,
                   unitValue: item.apiUnitValue,
                   unit: item.apiUnit,
+                  note: item.notes.trim(),
                 ),
               )
               .toList(),
@@ -1848,9 +1952,10 @@ class HomeController extends GetxController {
         }
       }
       if (prepareForKitchenPrint) {
-        lastKitchenOrderItems.assignAll(
-          pendingItems.map((item) => item.copy()),
-        );
+        lastKitchenOrderItems.assignAll(<CartItem>[
+          ...awaitingPrintItems,
+          ...pendingItems.map((item) => item.copy()),
+        ]);
         kitchenOrderAwaitingPrint.value = true;
         kitchenOrderAwaitingPrintTable.value = tableId;
       } else {
@@ -1926,6 +2031,7 @@ class HomeController extends GetxController {
                   quantity: item.orderQuantity,
                   unitValue: item.apiUnitValue,
                   unit: item.apiUnit,
+                  note: item.notes.trim(),
                 ),
               )
               .toList(),
@@ -2761,6 +2867,10 @@ class HomeController extends GetxController {
     _queueOrderTotalsSync();
   }
 
+  void updateItemNotes(CartItem item, String value) {
+    item.notes = value;
+  }
+
   Future<bool> decrement(CartItem item) async {
     removeKotQuantityError.value = null;
     _decrementLocal(item);
@@ -3106,6 +3216,53 @@ class HomeController extends GetxController {
     return Get.find<StaffController>().selectedStaff.value?.id;
   }
 
+  void _useKotTableStaff({required int? staffId, required String? staffName}) {
+    if (!Get.isRegistered<StaffController>()) return;
+    final normalizedName = staffName?.trim();
+    final controller = Get.find<StaffController>();
+    final selectedStaff = controller.selectedStaff.value;
+    final selectedName = selectedStaff?.name?.trim();
+    final selectedStaffMatches =
+        selectedStaff != null &&
+        ((staffId != null && selectedStaff.id == staffId) ||
+            (normalizedName?.isNotEmpty == true &&
+                selectedName?.toLowerCase() == normalizedName!.toLowerCase()));
+    final matchingStaff = selectedStaffMatches
+        ? selectedStaff
+        : controller.staff.firstWhereOrNull(
+            (staff) =>
+                (staffId != null && staff.id == staffId) ||
+                (normalizedName?.isNotEmpty == true &&
+                    staff.name?.trim().toLowerCase() ==
+                        normalizedName!.toLowerCase()),
+          );
+    controller.selectTemporaryStaff(
+      matchingStaff ??
+          StaffData(
+            id: staffId,
+            name: normalizedName?.isNotEmpty == true ? normalizedName : 'Staff',
+          ),
+    );
+  }
+
+  void _restoreStaffAfterKotTable() {
+    if (!Get.isRegistered<StaffController>()) return;
+    Get.find<StaffController>().restoreStaffBeforeTemporarySelection();
+  }
+
+  void _updateActiveKotTableStaff(StaffData? staff) {
+    if (staff == null ||
+        flow.value != PosFlow.kot ||
+        kotStage.value != KotStage.order) {
+      return;
+    }
+    final tableNumber = activeTableNumber.value;
+    if (tableNumber == null) return;
+    final order = tableOrders[tableNumber];
+    if (order == null) return;
+    tableOrders[tableNumber] = order.copyWithStaff(staff);
+  }
+
   void _cancelTotalsSync() {
     _totalsSyncTimer?.cancel();
     _totalsSyncTimer = null;
@@ -3124,10 +3281,12 @@ class HomeController extends GetxController {
 
   @override
   void onClose() {
+    _staffSelectionWorker?.dispose();
+    _staffSelectionWorker = null;
+    _restoreStaffAfterKotTable();
     _cancelTotalsSync();
     _tableStatusSyncTimer?.cancel();
     _tableStatusSyncTimer = null;
-    _staffSelectionWorker?.dispose();
     searchController.dispose();
     super.onClose();
   }

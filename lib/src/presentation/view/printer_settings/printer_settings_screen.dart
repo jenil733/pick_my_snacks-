@@ -148,6 +148,13 @@ class _PrinterAssignment extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: onChange,
                   icon: const Icon(Icons.bluetooth_searching_rounded),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: AppColors.primaryDark, width: .9),
+                    foregroundColor: AppColors.primaryDark,
+                    textStyle: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(fontSize: 12),
+                  ),
                   label: Text(
                     printer == null ? 'Select Printer' : 'Change Printer',
                   ),

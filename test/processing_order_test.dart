@@ -1,5 +1,8 @@
+import 'package:dio/dio.dart' as dio;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 import 'package:pick_my_snacks/src/core/const/api_routes.dart';
+import 'package:pick_my_snacks/src/data/model/get_staff.dart';
 import 'package:pick_my_snacks/src/data/model/get_table_status.dart';
 import 'package:pick_my_snacks/src/data/model/get_saveorder.dart';
 import 'package:pick_my_snacks/src/data/model/processing.dart';
@@ -10,8 +13,11 @@ import 'package:pick_my_snacks/src/domain/usecase/get_processing_order_usecase.d
 import 'package:pick_my_snacks/src/domain/usecase/get_table_status_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_usecase.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
+import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
 
 void main() {
+  tearDown(Get.reset);
+
   test('builds a table-specific processing-order endpoint', () {
     expect(ApiRoutes.processingOrder(12), 'get_processing_order/12');
     expect(ApiRoutes.processingOrder(4), 'get_processing_order/4');
@@ -84,7 +90,56 @@ void main() {
     },
   );
 
+  test('clears a stale occupied table when status returns 404', () async {
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      GetTableStatusUseCase(_NotFoundStatusRepository()),
+    );
+    const product = Product(
+      id: 974,
+      name: '3 Layer Panacotta',
+      unit: 'pcs',
+      price: 100,
+      image: '',
+    );
+    final item = CartItem(product: product);
+    controller.tableStatuses[2] = const TableStatusData(
+      tableId: 2,
+      tableStatus: 'Occupied',
+      isOccupied: 1,
+    );
+    controller.tableOrders[2] = KotTableOrder(
+      tableNumber: 2,
+      staffName: 'test',
+      openedAt: DateTime(2026),
+      items: [item],
+    );
+    controller.submittedKitchenTables.add(2);
+    controller.cart.add(item.copy());
+    controller.activeTableNumber.value = 2;
+    controller.flow.value = PosFlow.kot;
+    controller.kotStage.value = KotStage.order;
+
+    await controller.getTableStatuses(silent: true);
+
+    expect(controller.tableStatuses, isEmpty);
+    expect(controller.tableOrders, isEmpty);
+    expect(controller.submittedKitchenTables, isEmpty);
+    expect(controller.activeTableNumber.value, isNull);
+    expect(controller.cart, isEmpty);
+    expect(controller.kotStage.value, KotStage.tables);
+    expect(controller.tableStatusError.value, isNull);
+  });
+
   test('parses and restores a processing table order', () async {
+    final staffController = Get.put(StaffController());
+    await staffController.selectStaff(const StaffData(id: 2, name: 'Sam'));
     final response = ProcessingOrderResponse.fromJson({
       'status': true,
       'message': 'Processing order loaded',
@@ -135,14 +190,20 @@ void main() {
 
     expect(controller.processingOrder.value?.order?.orderId, 'ORD-55');
     expect(controller.kotStage.value, KotStage.details);
+    expect(staffController.selectedStaffName, 'Arun');
 
     controller.continueProcessingOrder();
 
+    expect(staffController.selectedStaffName, 'Arun');
     expect(controller.activeTableNumber.value, 8);
     expect(controller.savedOrderNumber.value, 'ORD-55');
     expect(controller.cart.single.product.name, 'Veg Sandwich');
     expect(controller.cart.single.quantity, 2);
     expect(controller.kotStage.value, KotStage.order);
+
+    controller.showKotTables();
+    expect(staffController.selectedStaffName, 'Sam');
+    controller.onClose();
   });
 
   test('does not override a free status returned by the status API', () async {
@@ -315,6 +376,18 @@ class _OccupiedStatusRepository implements TableStatusRepository {
           isOccupied: 1,
         ),
       ],
+    );
+  }
+}
+
+class _NotFoundStatusRepository implements TableStatusRepository {
+  @override
+  Future<TableStatusResponse> getTableStatuses() async {
+    final options = dio.RequestOptions(path: 'kot_table_status');
+    throw dio.DioException(
+      requestOptions: options,
+      response: dio.Response<void>(requestOptions: options, statusCode: 404),
+      type: dio.DioExceptionType.badResponse,
     );
   }
 }

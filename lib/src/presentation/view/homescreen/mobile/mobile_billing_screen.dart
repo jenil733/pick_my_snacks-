@@ -96,78 +96,97 @@ class MobileBillingScreen extends StatelessWidget {
                           .map(
                             (item) => Padding(
                               padding: const EdgeInsets.symmetric(vertical: 9),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
+                              child: Column(
                                 children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (controller.flow.value ==
+                                              PosFlow.kot ||
+                                          controller.flow.value ==
+                                              PosFlow.takeAway) ...[
+                                        Tooltip(
+                                          message:
+                                              controller.flow.value ==
+                                                  PosFlow.takeAway
+                                              ? 'Include ${item.product.name} in Kitchen Bill'
+                                              : 'Send ${item.product.name} to kitchen',
+                                          child: Checkbox(
+                                            value: controller
+                                                .isKitchenItemSelected(item),
+                                            onChanged: (value) => controller
+                                                .setKitchenItemSelected(
+                                                  item,
+                                                  value ?? false,
+                                                ),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                      ],
+                                      Expanded(
+                                        child: Text(
+                                          item.product.name,
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextHelper.body,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      BillQuantityControl(
+                                        controller: controller,
+                                        item: item,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      SizedBox(
+                                        width: 68,
+                                        child: Column(
+                                          children: [
+                                            IconButton(
+                                              tooltip:
+                                                  'Delete ${item.product.name}',
+                                              onPressed: () =>
+                                                  _deleteItem(context, item),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              constraints:
+                                                  const BoxConstraints.tightFor(
+                                                    width: 34,
+                                                    height: 34,
+                                                  ),
+                                              color: AppColors.delete,
+                                              icon: const Icon(
+                                                Icons.delete_outline_rounded,
+                                                size: 19,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              money(item.total),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              textAlign: TextAlign.center,
+                                              style: TextHelper.bodySemiBold,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                   if (controller.flow.value == PosFlow.kot ||
                                       controller.flow.value ==
                                           PosFlow.takeAway) ...[
-                                    Tooltip(
-                                      message:
-                                          controller.flow.value ==
-                                              PosFlow.takeAway
-                                          ? 'Include ${item.product.name} in Kitchen Bill'
-                                          : 'Send ${item.product.name} to kitchen',
-                                      child: Checkbox(
-                                        value: controller.isKitchenItemSelected(
-                                          item,
-                                        ),
-                                        onChanged: (value) =>
-                                            controller.setKitchenItemSelected(
-                                              item,
-                                              value ?? false,
-                                            ),
-                                        visualDensity: VisualDensity.compact,
+                                    const SizedBox(height: 8),
+                                    ExtraItemNoteField(
+                                      key: ValueKey(
+                                        'mobile-extra-${item.uniqueId}',
                                       ),
+                                      controller: controller,
+                                      item: item,
                                     ),
-                                    const SizedBox(width: 4),
                                   ],
-                                  Expanded(
-                                    child: Text(
-                                      item.product.name,
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextHelper.body,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  BillQuantityControl(
-                                    controller: controller,
-                                    item: item,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  SizedBox(
-                                    width: 68,
-                                    child: Column(
-                                      children: [
-                                        IconButton(
-                                          tooltip:
-                                              'Delete ${item.product.name}',
-                                          onPressed: () =>
-                                              _deleteItem(context, item),
-                                          visualDensity: VisualDensity.compact,
-                                          constraints:
-                                              const BoxConstraints.tightFor(
-                                                width: 34,
-                                                height: 34,
-                                              ),
-                                          color: AppColors.delete,
-                                          icon: const Icon(
-                                            Icons.delete_outline_rounded,
-                                            size: 19,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          money(item.total),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          textAlign: TextAlign.center,
-                                          style: TextHelper.bodySemiBold,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -315,11 +334,16 @@ class MobileBillingScreen extends StatelessWidget {
                 onPressed:
                     controller.cart.isEmpty ||
                         controller.isSavingTakeAwayHold.value ||
-                        controller.takeAwayHoldOrderId.value != null
+                        (controller.takeAwayHoldOrderId.value != null &&
+                            controller.lastKitchenOrderItems.isEmpty)
                     ? null
                     : () => sendTakeAwayKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
-                label: const Text('Kitchen Bill'),
+                label: Text(
+                  controller.takeAwayHoldOrderId.value != null
+                      ? 'Retry Kitchen Bill'
+                      : 'Kitchen Bill',
+                ),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.warning,
                   disabledBackgroundColor: AppColors.divider,
@@ -406,7 +430,8 @@ class MobileBillingScreen extends StatelessWidget {
             Expanded(
               child: FilledButton.icon(
                 onPressed:
-                    !controller.hasSelectedPendingKitchenItems ||
+                    (!controller.hasSelectedPendingKitchenItems &&
+                            !controller.hasKitchenOrderAwaitingPrint) ||
                         controller.isSavingKotOrder.value
                     ? null
                     : () => sendKotBill(context, controller),
@@ -414,6 +439,9 @@ class MobileBillingScreen extends StatelessWidget {
                 label: Text(
                   controller.isSavingKotOrder.value
                       ? 'Sending...'
+                      : controller.hasKitchenOrderAwaitingPrint &&
+                            !controller.hasSelectedPendingKitchenItems
+                      ? 'Retry Kitchen Bill'
                       : 'Kitchen Bill',
                 ),
                 style: FilledButton.styleFrom(

@@ -16,9 +16,10 @@ class StaffMenuButtonController {
 }
 
 class StaffMenu extends StatefulWidget {
-  const StaffMenu({this.buttonController, super.key});
+  const StaffMenu({this.buttonController, this.staffId, super.key});
 
   final StaffMenuButtonController? buttonController;
+  final int? staffId;
 
   @override
   State<StaffMenu> createState() => _StaffMenuState();
@@ -62,17 +63,28 @@ class _StaffMenuState extends State<StaffMenu>
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
-    return Obx(
-      () => Material(
+    return Obx(() {
+      String displayName = controller.selectedStaffName;
+      if (widget.staffId != null) {
+        final matches = controller.staff.where((s) => s.id == widget.staffId);
+        if (matches.isNotEmpty) {
+          final name = matches.first.name?.trim();
+          if (name != null && name.isNotEmpty) {
+            displayName = name;
+          }
+        }
+      }
+
+      return Material(
         key: _buttonKey,
         color: Colors.transparent,
         child: InkWell(
           onTap: controller.isLoading.value ? null : _activate,
           borderRadius: BorderRadius.circular(10),
           child: Container(
-            width: 145,
+            width: 120,
             height: 42,
-            constraints: const BoxConstraints(maxWidth: 145),
+            constraints: const BoxConstraints(maxWidth: 120),
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
@@ -151,7 +163,7 @@ class _StaffMenuState extends State<StaffMenu>
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          controller.selectedStaffName,
+                          displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -178,8 +190,8 @@ class _StaffMenuState extends State<StaffMenu>
             ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   Future<void> _activate() async {

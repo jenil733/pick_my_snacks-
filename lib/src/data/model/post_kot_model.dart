@@ -59,8 +59,10 @@ class KotOrderRequest {
       fields['customer_phone'] = normalizedCustomerPhone;
     }
     for (var index = 0; index < products.length; index++) {
-      fields['products[$index][product_id]'] = products[index].productId;
-      fields['products[$index][qty]'] = products[index].apiQuantity;
+      final product = products[index];
+      fields['products[$index][product_id]'] = product.productId;
+      fields['products[$index][qty]'] = product.apiQuantity;
+      fields['products[$index][note]'] = product.note.trim();
       fields['products[$index][is_kot]'] = 1;
     }
     return fields;
