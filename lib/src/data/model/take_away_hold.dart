@@ -38,7 +38,6 @@ class TakeAwayHoldRequest {
       'status': status.trim(),
       'discount_type': hasDiscount ? discountType : '',
       'discount_value': hasDiscount ? discountValue : '',
-      'is_kot': 1,
     };
 
     for (var index = 0; index < products.length; index++) {
@@ -46,6 +45,7 @@ class TakeAwayHoldRequest {
       fields['products[$index][product_id]'] = product.productId;
       fields['products[$index][qty]'] = product.apiQuantity;
       fields['products[$index][note]'] = product.note.trim();
+      fields['products[$index][is_kot]'] = (product.isKot ?? true) ? 1 : 0;
     }
     return fields;
   }

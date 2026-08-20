@@ -47,6 +47,25 @@ void main() {
     expect(fields['products[0][note]'], 'extra salt');
   });
 
+  test('builds close-time KOT products with individual kitchen flags', () {
+    const request = KotOrderRequest(
+      tableId: 4,
+      staffId: 7,
+      paymentMode: 'cash',
+      isKot: false,
+      products: [
+        SaveOrderProductRequest(productId: 10, quantity: 2, isKot: true),
+        SaveOrderProductRequest(productId: 11, quantity: 1, isKot: false),
+      ],
+    );
+
+    final fields = request.toFormFields();
+
+    expect(fields['is_kot'], 0);
+    expect(fields['products[0][is_kot]'], 1);
+    expect(fields['products[1][is_kot]'], 0);
+  });
+
   test('Kitchen Bill sends only items added since the previous send', () async {
     final repository = _FakeKotOrderRepository();
     final normalRepository = _FakeOrderRepository();
@@ -304,6 +323,7 @@ void main() {
       expect(repository.requests, hasLength(2));
       expect(repository.requests.last.products, hasLength(1));
       expect(repository.requests.last.products.single.productId, 202);
+      expect(repository.requests.last.isKot, isFalse);
       expect(controller.pendingKitchenItems, isEmpty);
     },
   );
@@ -406,7 +426,7 @@ void main() {
     },
   );
 
-  testWidgets('Close Bill saves new products without sending a Kitchen Bill', (
+  testWidgets('Close Bill does not send unselected products to the kitchen', (
     tester,
   ) async {
     Get.testMode = true;
@@ -439,6 +459,25 @@ void main() {
         image: '',
       ),
     );
+    controller.addProduct(
+      const Product(
+        id: 202,
+        productId: 'P202',
+        name: 'Tea',
+        unit: 'pcs',
+        price: 20,
+        image: '',
+      ),
+    );
+    controller.setKitchenItemSelected(controller.cart.first, true);
+
+    expect(
+      await controller.saveKitchenOrder(staffId: 7, selectedOnly: true),
+      isTrue,
+    );
+    expect(kitchenRepository.requests, hasLength(1));
+    expect(kitchenRepository.requests.single.products, hasLength(1));
+    expect(kitchenRepository.requests.single.products.single.productId, 101);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -453,8 +492,8 @@ void main() {
     await tester.tap(find.text('Close Bill'));
     await tester.pumpAndSettle();
 
+    // Closing must not call the Raspberry Pi kitchen-print endpoint again.
     expect(kitchenRepository.requests, hasLength(1));
-    expect(kitchenRepository.requests.single.products.single.productId, 101);
     expect(controller.hasKitchenOrderAwaitingPrint, isFalse);
     expect(controller.lastKitchenOrderItems, isEmpty);
     expect(closeRepository.tableIds, <int>[3]);

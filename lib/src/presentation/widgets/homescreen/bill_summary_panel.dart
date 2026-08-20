@@ -665,6 +665,19 @@ Future<void> printReceipt(
   final isKotFlow = controller.flow.value == PosFlow.kot;
   final hasCustomerDetails = await _requireCustomerDetails(context, controller);
   if (!hasCustomerDetails || !context.mounted) return;
+  // The KOT close endpoint only returns products previously sent to the
+  // kitchen. Keep the complete local cart and totals for the billing-printer
+  // receipt so products that were intentionally not sent to the kitchen are
+  // still included in the customer's final bill.
+  final localKotItems = isKotFlow
+      ? controller.cart.map((item) => item.copy()).toList(growable: false)
+      : const <CartItem>[];
+  final localKotSubtotal = controller.subtotal;
+  final localKotTax = controller.tax;
+  final localKotDiscount = controller.discountAmount;
+  final localKotCharge = controller.chargeAmount.value;
+  final localKotTotal = controller.total;
+  final localKotPaymentMethod = controller.paymentMethod.value;
   final staffController = Get.isRegistered<StaffController>()
       ? Get.find<StaffController>()
       : null;
@@ -688,23 +701,16 @@ Future<void> printReceipt(
     return;
   }
 
-  final completedOrder = controller.completedKotOrder.value?.completedOrder;
   final items = isKotFlow
-      ? controller.completedReceiptItems
+      ? localKotItems
       : controller.cart.map((item) => item.copy()).toList();
-  final subtotal = isKotFlow
-      ? completedOrder?.subtotal ?? 0
-      : controller.subtotal;
-  final tax = isKotFlow ? completedOrder?.gst ?? 0 : controller.tax;
-  final discount = isKotFlow
-      ? completedOrder?.discount ?? 0
-      : controller.discountAmount;
-  final charge = isKotFlow
-      ? completedOrder?.charge ?? 0
-      : controller.chargeAmount.value;
-  final total = isKotFlow ? completedOrder?.total ?? 0 : controller.total;
+  final subtotal = isKotFlow ? localKotSubtotal : controller.subtotal;
+  final tax = isKotFlow ? localKotTax : controller.tax;
+  final discount = isKotFlow ? localKotDiscount : controller.discountAmount;
+  final charge = isKotFlow ? localKotCharge : controller.chargeAmount.value;
+  final total = isKotFlow ? localKotTotal : controller.total;
   final paymentMethod = isKotFlow
-      ? completedOrder?.paymentMode ?? controller.paymentMethod.value
+      ? localKotPaymentMethod
       : controller.paymentMethod.value;
   final orderNumber = controller.savedOrderNumber.value ?? '';
   final printerService = ReceiptPrinterService();
@@ -880,8 +886,17 @@ Future<bool> sendTakeAwayKotBill(
       .where(controller.isKitchenItemSelected)
       .map((item) => item.copy())
       .toList(growable: false);
+  if (selectedItems.isEmpty) {
+    _showPrinterToast(
+      context,
+      'Select at least one product for the Kitchen Bill.',
+    );
+    return false;
+  }
   final saved = await controller.saveTakeAwayKitchenBill(
     staffId: staffController?.selectedStaff.value?.id,
+    selectedOnly: false,
+    markAsKitchen: false,
   );
   if (!context.mounted) return false;
   if (!saved) {
@@ -942,6 +957,9 @@ Future<bool> _printKitchenTicket(
   } on PrinterManagerException catch (error) {
     if (!context.mounted) return false;
     AppToast.dismiss();
+    if (error.message.startsWith('No kitchen printer is selected.')) {
+      return false;
+    }
     _showPrinterToast(context, '${error.message} Order saved.');
     return false;
   } catch (_) {
@@ -1200,6 +1218,23 @@ Future<void> completeTakeAway(
   BuildContext context,
   HomeController controller,
 ) async {
+  final hasCustomerDetails = await _requireCustomerDetails(context, controller);
+  if (!hasCustomerDetails || !context.mounted) return;
+  final staffController = Get.isRegistered<StaffController>()
+      ? Get.find<StaffController>()
+      : null;
+  final prepared = await controller.prepareTakeAwayOrderForCompletion(
+    staffId: staffController?.selectedStaff.value?.id,
+  );
+  if (!context.mounted) return;
+  if (!prepared) {
+    _showPrinterToast(
+      context,
+      controller.takeAwayHoldError.value ??
+          'Unable to prepare the take-away order.',
+    );
+    return;
+  }
   final completed = await controller.completeTakeAwayOrder();
   if (!context.mounted) return;
   if (!completed) {
@@ -1233,23 +1268,9 @@ Future<void> closeKotBill(
     );
     return;
   }
-  if (controller.pendingKitchenItems.isNotEmpty) {
-    final staffController = Get.isRegistered<StaffController>()
-        ? Get.find<StaffController>()
-        : null;
-    final prepared = await controller.prepareKotOrderForCompletion(
-      staffId: staffController?.selectedStaff.value?.id,
-    );
-    if (!context.mounted) return;
-    if (!prepared) {
-      _showPrinterToast(
-        context,
-        controller.kotOrderError.value ??
-            'Unable to save pending products before closing.',
-      );
-      return;
-    }
-  }
+  // `kot_hold_save_order` is the Raspberry Pi kitchen-print trigger. Closing
+  // the bill must not submit pending/unselected products through that API;
+  // they belong only on the final Bluetooth billing receipt.
   await printReceipt(context, controller, recoverMissingKotHold: false);
 }
 

@@ -14,6 +14,7 @@ class KotOrderRequest {
     this.chargeReason = '',
     this.customerName,
     this.customerPhone,
+    this.isKot = true,
   });
 
   final int tableId;
@@ -28,6 +29,7 @@ class KotOrderRequest {
   final String chargeReason;
   final String? customerName;
   final String? customerPhone;
+  final bool isKot;
 
   Map<String, dynamic> toFormFields() {
     final fields = <String, dynamic>{
@@ -35,7 +37,7 @@ class KotOrderRequest {
       'staff_id': staffId,
       'payment_mode': paymentMode,
       'discount_type': discountType,
-      'is_kot': 1,
+      'is_kot': isKot ? 1 : 0,
     };
     if (discountType != 'none') {
       fields['discount_value'] = discountValue;
@@ -63,7 +65,7 @@ class KotOrderRequest {
       fields['products[$index][product_id]'] = product.productId;
       fields['products[$index][qty]'] = product.apiQuantity;
       fields['products[$index][note]'] = product.note.trim();
-      fields['products[$index][is_kot]'] = 1;
+      fields['products[$index][is_kot]'] = (product.isKot ?? isKot) ? 1 : 0;
     }
     return fields;
   }

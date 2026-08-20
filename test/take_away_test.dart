@@ -116,8 +116,14 @@ void main() {
           quantity: 0.450,
           unit: 'kg',
           note: 'extra salt',
+          isKot: false,
         ),
-        SaveOrderProductRequest(productId: 5, quantity: 1, unit: 'pcs'),
+        SaveOrderProductRequest(
+          productId: 5,
+          quantity: 1,
+          unit: 'pcs',
+          isKot: true,
+        ),
       ],
     );
 
@@ -132,12 +138,13 @@ void main() {
       'products[0][product_id]': 4,
       'products[0][qty]': '0.45kg',
       'products[0][note]': 'extra salt',
+      'products[0][is_kot]': 0,
       'products[1][product_id]': 5,
       'products[1][qty]': '1pcs',
       'products[1][note]': '',
+      'products[1][is_kot]': 1,
       'discount_type': '',
       'discount_value': '',
-      'is_kot': 1,
     });
   });
 
@@ -394,76 +401,147 @@ void main() {
     expect(controller.completedTakeAwayOrders.single.customerName, 'test');
   });
 
-  test('take away kitchen bill saves only selected products', () async {
-    final repository = _FakeTakeAwayHoldRepository();
-    final saveRepository = _FakeTakeAwaySaveOrderRepository();
-    final controller = HomeController(
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      TakeAwayHoldUseCase(repository),
-      TakeAwaySaveOrderUseCase(saveRepository),
-    )..selectFlow(PosFlow.takeAway);
-    const burger = Product(
-      id: 4,
-      name: 'Burger',
-      unit: 'kg',
-      price: 100,
-      image: '',
-    );
-    const tea = Product(id: 5, name: 'Tea', unit: 'pcs', price: 20, image: '');
-    controller.addProduct(burger);
-    controller.addProduct(tea);
-    controller.setItemAmount(controller.cart.first, 0.45);
-    controller.updateItemNotes(controller.cart.first, 'extra salt');
-    controller.setKitchenItemSelected(controller.cart.first, true);
-    controller.takeAwayCustomerName.value = 'Anu';
-    controller.takeAwayCustomerPhone.value = '9876543210';
-    expect(repository.requests, isEmpty);
+  test(
+    'take away kitchen bill holds every product with kitchen flags',
+    () async {
+      final repository = _FakeTakeAwayHoldRepository();
+      final saveRepository = _FakeTakeAwaySaveOrderRepository();
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        TakeAwayHoldUseCase(repository),
+        TakeAwaySaveOrderUseCase(saveRepository),
+      )..selectFlow(PosFlow.takeAway);
+      const burger = Product(
+        id: 4,
+        name: 'Burger',
+        unit: 'kg',
+        price: 100,
+        image: '',
+      );
+      const tea = Product(
+        id: 5,
+        name: 'Tea',
+        unit: 'pcs',
+        price: 20,
+        image: '',
+      );
+      controller.addProduct(burger);
+      controller.addProduct(tea);
+      controller.setItemAmount(controller.cart.first, 0.45);
+      controller.updateItemNotes(controller.cart.first, 'extra salt');
+      controller.setKitchenItemSelected(controller.cart.first, true);
+      controller.takeAwayCustomerName.value = 'Anu';
+      controller.takeAwayCustomerPhone.value = '9876543210';
+      expect(repository.requests, isEmpty);
 
-    expect(await controller.saveTakeAwayKitchenBill(staffId: 1), isTrue);
+      expect(
+        await controller.saveTakeAwayKitchenBill(
+          staffId: 1,
+          selectedOnly: false,
+          markAsKitchen: false,
+        ),
+        isTrue,
+      );
 
-    expect(repository.requests, hasLength(1));
-    expect(repository.requests.single.products, hasLength(1));
-    expect(repository.requests.single.products.single.productId, 4);
-    expect(repository.requests.single.products.single.apiQuantity, '0.45kg');
-    expect(repository.requests.single.products.single.note, 'extra salt');
-    expect(repository.requests.single.customerName, 'Anu');
-    expect(repository.requests.single.customerPhone, '9876543210');
-    expect(controller.savedOrderNumber.value, 'TA-1001');
-    expect(controller.takeAwayHoldOrderId.value, 1001);
-    expect(controller.pendingTakeAwayHoldIds, contains(1001));
-    expect(controller.lastKitchenOrderItems.single.product.id, 4);
+      expect(repository.requests, hasLength(1));
+      expect(repository.requests.single.products, hasLength(2));
+      expect(repository.requests.single.products[0].productId, 4);
+      expect(repository.requests.single.products[0].apiQuantity, '0.45kg');
+      expect(repository.requests.single.products[0].note, 'extra salt');
+      expect(repository.requests.single.products[0].isKot, isTrue);
+      expect(repository.requests.single.products[1].productId, 5);
+      expect(repository.requests.single.products[1].apiQuantity, '1pcs');
+      expect(repository.requests.single.products[1].isKot, isFalse);
+      expect(repository.requests.single.customerName, 'Anu');
+      expect(repository.requests.single.customerPhone, '9876543210');
+      expect(controller.savedOrderNumber.value, 'TA-1001');
+      expect(controller.takeAwayHoldOrderId.value, 1001);
+      expect(controller.pendingTakeAwayHoldIds, contains(1001));
+      expect(controller.lastKitchenOrderItems.single.product.id, 4);
 
-    expect(await controller.saveTakeAwayKitchenBill(staffId: 1), isFalse);
-    expect(repository.requests, hasLength(1));
-    expect(controller.takeAwayHoldError.value, contains('already in Pending'));
+      expect(await controller.saveTakeAwayKitchenBill(staffId: 1), isFalse);
+      expect(repository.requests, hasLength(1));
+      expect(
+        controller.takeAwayHoldError.value,
+        contains('already in Pending'),
+      );
 
-    expect(await controller.completeTakeAwayOrder(), isTrue);
-    expect(saveRepository.requests.single.holdOrderId, 1001);
-    expect(controller.pendingTakeAwayHoldIds, isEmpty);
-    expect(controller.savedOrderNumber.value, 'TA-FINAL-1001');
-    expect(await controller.completeTakeAwayOrder(), isTrue);
-    expect(saveRepository.requests, hasLength(1));
-    expect(controller.completedTakeAwayOrders, hasLength(1));
+      expect(await controller.completeTakeAwayOrder(), isTrue);
+      expect(saveRepository.requests.single.holdOrderId, 1001);
+      expect(controller.pendingTakeAwayHoldIds, isEmpty);
+      expect(controller.savedOrderNumber.value, 'TA-FINAL-1001');
+      expect(await controller.completeTakeAwayOrder(), isTrue);
+      expect(saveRepository.requests, hasLength(1));
+      expect(controller.completedTakeAwayOrders, hasLength(1));
 
-    controller.startNewBill();
-    expect(controller.takeAwayCustomerName.value, isEmpty);
-    expect(controller.takeAwayCustomerPhone.value, isEmpty);
-    expect(controller.takeAwayHoldOrderId.value, isNull);
-    expect(controller.isTakeAwayOrderCompleted.value, isFalse);
-    expect(controller.completedTakeAwayOrders, hasLength(1));
-  });
+      controller.startNewBill();
+      expect(controller.takeAwayCustomerName.value, isEmpty);
+      expect(controller.takeAwayCustomerPhone.value, isEmpty);
+      expect(controller.takeAwayHoldOrderId.value, isNull);
+      expect(controller.isTakeAwayOrderCompleted.value, isFalse);
+      expect(controller.completedTakeAwayOrders, hasLength(1));
+    },
+  );
+
+  test(
+    'take away close hold sends all products with individual kitchen flags',
+    () async {
+      final repository = _FakeTakeAwayHoldRepository();
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        TakeAwayHoldUseCase(repository),
+      )..selectFlow(PosFlow.takeAway);
+      controller.addProduct(
+        const Product(id: 4, name: 'Burger', unit: 'kg', price: 100, image: ''),
+      );
+      controller.addProduct(
+        const Product(id: 3, name: 'Tea', unit: 'pcs', price: 20, image: ''),
+      );
+      controller.setItemAmount(controller.cart.first, 0.45);
+      controller.setKitchenItemSelected(controller.cart.last, true);
+      controller.takeAwayCustomerName.value = 'Jenil';
+      controller.takeAwayCustomerPhone.value = '0987654321';
+
+      expect(
+        await controller.prepareTakeAwayOrderForCompletion(staffId: 1),
+        isTrue,
+      );
+
+      expect(repository.requests, hasLength(1));
+      expect(repository.requests.single.products, hasLength(2));
+      expect(repository.requests.single.products[0].productId, 4);
+      expect(repository.requests.single.products[0].apiQuantity, '0.45kg');
+      expect(repository.requests.single.products[0].isKot, isFalse);
+      expect(repository.requests.single.products[1].productId, 3);
+      expect(repository.requests.single.products[1].apiQuantity, '1pcs');
+      expect(repository.requests.single.products[1].isKot, isTrue);
+      expect(controller.lastKitchenOrderItems.single.product.id, 3);
+    },
+  );
 
   test('take away kitchen bill requires customer details', () async {
     final repository = _FakeTakeAwayHoldRepository();

@@ -66,6 +66,7 @@ class SaveOrderProductRequest {
     this.unitValue,
     this.unit = '',
     this.note = '',
+    this.isKot,
   });
 
   final int productId;
@@ -73,6 +74,7 @@ class SaveOrderProductRequest {
   final num? unitValue;
   final String unit;
   final String note;
+  final bool? isKot;
 
   String get apiQuantity {
     final normalizedUnit = _normalizedQuantityUnit(unit);

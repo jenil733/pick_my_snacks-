@@ -1828,6 +1828,7 @@ class HomeController extends GetxController {
     required int? staffId,
     bool selectedOnly = false,
     bool prepareForKitchenPrint = true,
+    bool markAsKitchen = true,
   }) async {
     final useCase = _saveKotOrderUseCase;
     if (useCase == null) {
@@ -1878,6 +1879,7 @@ class HomeController extends GetxController {
           chargeReason: chargeReason.value,
           customerName: takeAwayCustomerName.value,
           customerPhone: takeAwayCustomerPhone.value,
+          isKot: markAsKitchen,
           products: pendingItems
               .map(
                 (item) => SaveOrderProductRequest(
@@ -1886,6 +1888,11 @@ class HomeController extends GetxController {
                   unitValue: item.apiUnitValue,
                   unit: item.apiUnit,
                   note: item.notes.trim(),
+                  isKot: markAsKitchen
+                      ? true
+                      : kitchenSelectedItems.any(
+                          (selected) => selected.uniqueId == item.uniqueId,
+                        ),
                 ),
               )
               .toList(),
@@ -1976,7 +1983,11 @@ class HomeController extends GetxController {
     }
   }
 
-  Future<bool> saveTakeAwayKitchenBill({required int? staffId}) async {
+  Future<bool> saveTakeAwayKitchenBill({
+    required int? staffId,
+    bool selectedOnly = true,
+    bool markAsKitchen = true,
+  }) async {
     if (isSavingTakeAwayHold.value) return false;
     if (takeAwayHoldOrderId.value != null) {
       takeAwayHoldError.value =
@@ -2003,12 +2014,16 @@ class HomeController extends GetxController {
       return false;
     }
 
-    final selectedItems = cart
+    final kitchenSelectedItems = cart
         .where(isKitchenItemSelected)
         .toList(growable: false);
-    if (selectedItems.isEmpty) {
-      takeAwayHoldError.value =
-          'Select at least one product for the Kitchen Bill.';
+    final pendingItems = selectedOnly
+        ? kitchenSelectedItems
+        : cart.toList(growable: false);
+    if (pendingItems.isEmpty) {
+      takeAwayHoldError.value = selectedOnly
+          ? 'Select at least one product for the Kitchen Bill.'
+          : 'Add at least one product to the take-away order.';
       return false;
     }
 
@@ -2024,7 +2039,7 @@ class HomeController extends GetxController {
           charge: chargeAmount.value,
           discountType: discountType.value,
           discountValue: discountValue.value,
-          products: selectedItems
+          products: pendingItems
               .map(
                 (item) => SaveOrderProductRequest(
                   productId: item.product.id,
@@ -2032,6 +2047,11 @@ class HomeController extends GetxController {
                   unitValue: item.apiUnitValue,
                   unit: item.apiUnit,
                   note: item.notes.trim(),
+                  isKot: markAsKitchen
+                      ? true
+                      : kitchenSelectedItems.any(
+                          (selected) => selected.uniqueId == item.uniqueId,
+                        ),
                 ),
               )
               .toList(),
@@ -2055,7 +2075,9 @@ class HomeController extends GetxController {
       backendSubtotal.value = order?.subtotal;
       backendGst.value = order?.gst;
       backendTotal.value = order?.total;
-      lastKitchenOrderItems.assignAll(selectedItems.map((item) => item.copy()));
+      lastKitchenOrderItems.assignAll(
+        kitchenSelectedItems.map((item) => item.copy()),
+      );
       log(
         'Take-away kitchen bill saved. Order ID: $orderNumber',
         name: 'TakeAwayHoldController',
@@ -2082,6 +2104,17 @@ class HomeController extends GetxController {
     } finally {
       isSavingTakeAwayHold.value = false;
     }
+  }
+
+  Future<bool> prepareTakeAwayOrderForCompletion({
+    required int? staffId,
+  }) async {
+    if (takeAwayHoldOrderId.value != null) return true;
+    return saveTakeAwayKitchenBill(
+      staffId: staffId,
+      selectedOnly: false,
+      markAsKitchen: false,
+    );
   }
 
   Future<bool> holdActiveKotTable({required int? staffId}) async {
@@ -2301,7 +2334,11 @@ class HomeController extends GetxController {
   Future<bool> prepareKotOrderForCompletion({required int? staffId}) async {
     if (!await reconcileEditedKotOrder(staffId: staffId)) return false;
     if (pendingKitchenItems.isEmpty) return true;
-    return saveKitchenOrder(staffId: staffId, prepareForKitchenPrint: false);
+    return saveKitchenOrder(
+      staffId: staffId,
+      prepareForKitchenPrint: false,
+      markAsKitchen: false,
+    );
   }
 
   static bool _isMissingHoldBill(String? message) {
