@@ -998,7 +998,7 @@ Future<bool> printTakeAwayBill(
         total: controller.total,
         paymentMethod: controller.paymentMethod.value,
         orderNumber: orderNumber,
-        showRate: false,
+        showRate: true,
         customerName: controller.takeAwayCustomerName.value,
         customerPhone: controller.takeAwayCustomerPhone.value,
       ),
@@ -1268,9 +1268,22 @@ Future<void> closeKotBill(
     );
     return;
   }
-  // `kot_hold_save_order` is the Raspberry Pi kitchen-print trigger. Closing
-  // the bill must not submit pending/unselected products through that API;
-  // they belong only on the final Bluetooth billing receipt.
+  final staffController = Get.isRegistered<StaffController>()
+      ? Get.find<StaffController>()
+      : null;
+  final prepared = await controller.prepareKotOrderForCompletion(
+    staffId: staffController?.selectedStaff.value?.id,
+  );
+  if (!context.mounted) return;
+  if (!prepared) {
+    _showPrinterToast(
+      context,
+      controller.kotOrderError.value ??
+          'Unable to prepare the complete KOT bill.',
+    );
+    return;
+  }
+
   await printReceipt(context, controller, recoverMissingKotHold: false);
 }
 

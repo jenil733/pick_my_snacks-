@@ -120,7 +120,7 @@ class PrinterManager {
         paymentMethod: job.paymentMethod,
         orderNumber: job.orderNumber,
         paperSize: job.paperSize,
-        showRate: false,
+        showRate: job.showRate,
         showAmount: false,
         showTotals: false,
         separateProducts: true,
