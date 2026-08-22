@@ -736,7 +736,9 @@ class ReceiptPrinterService {
       PosColumn(
         text: productName,
         width: showRate
-            ? 2
+            ? showAmount
+                  ? 2
+                  : 5
             : showAmount
             ? 4
             : 7,

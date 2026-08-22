@@ -606,17 +606,6 @@ Future<void> printDuplicateBill(
       ? Get.find<StaffController>()
       : null;
   final staff = staffController?.selectedStaff.value;
-  if (controller.savedOrderNumber.value == null) {
-    final orderSaved = await controller.saveOrder(staffId: staff?.id);
-    if (!context.mounted) return;
-    if (!orderSaved) {
-      _showPrinterToast(
-        context,
-        controller.saveOrderError.value ?? 'Unable to save the order.',
-      );
-      return;
-    }
-  }
 
   final printerService = ReceiptPrinterService();
   try {

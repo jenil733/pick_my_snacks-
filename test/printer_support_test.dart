@@ -192,4 +192,75 @@ void main() {
     expect(lines[productLine + 1], contains('---'));
     expect(bytes.sublist(bytes.length - 3), orderedEquals([27, 100, 5]));
   });
+
+  test('take away receipt can show rate without amount', () async {
+    final bytes = await ReceiptPrinterService().buildReceiptBytes(
+      items: [
+        CartItem(
+          product: const Product(
+            id: 4,
+            name: 'Banana Chips',
+            unit: '1 pc',
+            price: 80,
+            image: '',
+          ),
+          quantity: 2,
+        ),
+      ],
+      subtotal: 160,
+      tax: 8,
+      total: 168,
+      paymentMethod: 'cash',
+      orderNumber: 'TA-67891',
+      paperSize: ReceiptPaperSize.mm58,
+      showRate: true,
+      showAmount: false,
+      showTotals: false,
+      separateProducts: true,
+      endFeedLines: 5,
+    );
+    final printable = String.fromCharCodes(bytes);
+
+    expect(printable, contains('Rate'));
+    expect(printable, contains('80.00'));
+    expect(printable, isNot(contains('Amount')));
+    expect(printable, isNot(contains('160.00')));
+    expect(printable, isNot(contains('Grand Total')));
+  });
+
+  test('completed take away receipt uses the normal bill layout', () async {
+    final bytes = await ReceiptPrinterService().buildReceiptBytes(
+      items: [
+        CartItem(
+          product: const Product(
+            id: 5,
+            name: 'Potato Chips',
+            unit: '1 pc',
+            price: 100,
+            image: '',
+          ),
+          quantity: 2,
+        ),
+      ],
+      subtotal: 200,
+      tax: 10,
+      total: 210,
+      paymentMethod: 'cash',
+      orderNumber: 'TA-67892',
+      paperSize: ReceiptPaperSize.mm58,
+      showRate: true,
+      showAmount: true,
+      showTotals: true,
+      separateProducts: false,
+      endFeedLines: 3,
+    );
+    final printable = String.fromCharCodes(bytes);
+
+    expect(printable, contains('Rate'));
+    expect(printable, contains('Amount'));
+    expect(printable, contains('100.00'));
+    expect(printable, contains('200.00'));
+    expect(printable, contains('Grand Total'));
+    expect(printable, contains('210.00'));
+  });
 }

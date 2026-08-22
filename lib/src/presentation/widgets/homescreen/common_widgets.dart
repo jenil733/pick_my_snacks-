@@ -314,7 +314,7 @@ class _ExtraItemNoteFieldState extends State<ExtraItemNoteField> {
       textInputAction: TextInputAction.done,
       maxLines: 1,
       decoration: const InputDecoration(
-        hintText: 'Extra',
+        hintText: 'Special mention',
         isDense: true,
         contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
         border: OutlineInputBorder(),
