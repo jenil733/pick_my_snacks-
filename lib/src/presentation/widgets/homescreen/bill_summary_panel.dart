@@ -980,11 +980,11 @@ Future<bool> printTakeAwayBill(
     await manager.printTakeAwayReceipt(
       ReceiptPrintJob(
         items: items,
-        subtotal: controller.subtotal,
+        subtotal: controller.cartItemsSubtotal,
         tax: controller.tax,
-        discount: controller.discountAmount,
+        discount: controller.cartItemsDiscountAmount,
         charge: controller.chargeAmount.value,
-        total: controller.total,
+        total: controller.cartItemsTotal,
         paymentMethod: controller.paymentMethod.value,
         orderNumber: orderNumber,
         showRate: true,

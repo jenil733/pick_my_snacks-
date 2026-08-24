@@ -273,7 +273,7 @@ void main() {
   );
 
   test(
-    'closing a KOT sends products left out of the selected Kitchen Bill',
+    'closing a KOT does not send products left out of the Kitchen Bill',
     () async {
       final repository = _FakeKotOrderRepository();
       final controller = HomeController(
@@ -320,11 +320,10 @@ void main() {
 
       expect(await controller.prepareKotOrderForCompletion(staffId: 7), isTrue);
 
-      expect(repository.requests, hasLength(2));
-      expect(repository.requests.last.products, hasLength(1));
-      expect(repository.requests.last.products.single.productId, 202);
-      expect(repository.requests.last.isKot, isFalse);
-      expect(controller.pendingKitchenItems, isEmpty);
+      expect(repository.requests, hasLength(1));
+      expect(repository.requests.single.products.single.productId, 101);
+      expect(controller.pendingKitchenItems, hasLength(1));
+      expect(controller.pendingKitchenItems.single.product.id, 202);
     },
   );
 

@@ -1,3 +1,10 @@
+import java.util.Properties
+import java.io.FileInputStream
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -16,6 +23,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
+    }
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias = keystoreProperties["keyAlias"]?.toString()
+                keyPassword = keystoreProperties["keyPassword"]?.toString()
+                storeFile = keystoreProperties["storeFile"]?.toString()?.let { file(it) }
+                storePassword = keystoreProperties["storePassword"]?.toString()
+            }
+        }
     }
 
     defaultConfig {

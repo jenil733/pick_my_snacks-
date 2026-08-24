@@ -1320,18 +1320,30 @@ class HomeController extends GetxController {
   double get subtotal =>
       backendSubtotal.value ?? cart.fold(0, (sum, item) => sum + item.total);
   double get tax => backendGst.value ?? 0;
-  double get discountAmount {
+  double _discountFor(double baseSubtotal, double baseTax) {
     final value = discountValue.value;
     if (discountType.value == 'flat') {
-      return value.clamp(0, subtotal + tax).toDouble();
+      return value.clamp(0, baseSubtotal + baseTax).toDouble();
     }
     if (discountType.value == 'percentage') {
-      return (subtotal * value.clamp(0, 100) / 100)
-          .clamp(0, subtotal + tax)
+      return (baseSubtotal * value.clamp(0, 100) / 100)
+          .clamp(0, baseSubtotal + baseTax)
           .toDouble();
     }
     return 0;
   }
+
+  double get discountAmount => _discountFor(subtotal, tax);
+
+  /// Values derived from the rows currently displayed in the cart. Receipt
+  /// printing uses these so partial backend totals are not mixed with the full
+  /// local item list.
+  double get cartItemsSubtotal => cart.fold(0, (sum, item) => sum + item.total);
+  double get cartItemsDiscountAmount => _discountFor(cartItemsSubtotal, tax);
+  double get cartItemsTotal =>
+      (cartItemsSubtotal + tax - cartItemsDiscountAmount + chargeAmount.value)
+          .clamp(0, double.infinity)
+          .toDouble();
 
   double get total =>
       backendTotal.value ??
@@ -2326,19 +2338,13 @@ class HomeController extends GetxController {
     return false;
   }
 
-  /// Makes sure the backend has every cart row before the KOT is completed.
+  /// Verifies that the KOT can be completed without submitting pending rows.
   ///
-  /// The Kitchen Bill can intentionally send only selected products. Any
-  /// unselected rows must still be saved when the final bill is closed,
-  /// otherwise the backend total covers only the selected subset.
+  /// Only products explicitly selected through the Kitchen Bill action may be
+  /// sent to [saveKitchenOrder]. Unselected products stay out of the
+  /// `kot_hold_save_order` request when the final bill is closed.
   Future<bool> prepareKotOrderForCompletion({required int? staffId}) async {
-    if (!await reconcileEditedKotOrder(staffId: staffId)) return false;
-    if (pendingKitchenItems.isEmpty) return true;
-    return saveKitchenOrder(
-      staffId: staffId,
-      prepareForKitchenPrint: false,
-      markAsKitchen: false,
-    );
+    return reconcileEditedKotOrder(staffId: staffId);
   }
 
   static bool _isMissingHoldBill(String? message) {
@@ -3163,66 +3169,12 @@ class HomeController extends GetxController {
   }
 
   void refreshOrderTotals() {
-    _queueOrderTotalsSync(delay: Duration.zero);
+    _queueOrderTotalsSync();
   }
 
-  void _queueOrderTotalsSync({
-    Duration delay = const Duration(milliseconds: 250),
-  }) {
+  void _queueOrderTotalsSync() {
     _syncActiveTableOrder();
     _resetBackendTotals();
-    if (flow.value != PosFlow.billing) return;
-    final useCase = _saveOrderUseCase;
-    final staffId = _selectedStaffId;
-    if (useCase == null || staffId == null || cart.isEmpty) return;
-
-    final revision = _totalsSyncRevision;
-    final request = _saveOrderRequest(staffId);
-    _totalsSyncTimer = Timer(
-      delay,
-      () => unawaited(_syncOrderTotals(useCase, request, revision)),
-    );
-  }
-
-  Future<void> _syncOrderTotals(
-    SaveOrderUseCase useCase,
-    SaveOrderRequest request,
-    int revision,
-  ) async {
-    isSyncingTotals.value = true;
-    try {
-      final response = await useCase(request);
-      if (revision != _totalsSyncRevision) return;
-      if (response.status == false) {
-        log(
-          response.message ?? 'Unable to refresh order totals.',
-          name: 'OrderTotals',
-        );
-        return;
-      }
-
-      final order = response.data?.order;
-      backendSubtotal.value = order?.subtotal;
-      backendGst.value = order?.gst ?? 0;
-      backendTotal.value = order?.total ?? subtotal;
-    } on DioException catch (error) {
-      if (revision == _totalsSyncRevision) {
-        log(_saveOrderApiError(error), name: 'OrderTotals', error: error);
-      }
-    } catch (error, stackTrace) {
-      if (revision == _totalsSyncRevision) {
-        log(
-          'Unable to refresh order totals.',
-          name: 'OrderTotals',
-          error: error,
-          stackTrace: stackTrace,
-        );
-      }
-    } finally {
-      if (revision == _totalsSyncRevision) {
-        isSyncingTotals.value = false;
-      }
-    }
   }
 
   SaveOrderRequest _saveOrderRequest(int staffId) {

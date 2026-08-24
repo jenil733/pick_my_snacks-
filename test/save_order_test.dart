@@ -164,4 +164,44 @@ void main() {
     expect(litres.apiUnitValue, 0.5);
     expect(litres.apiUnit, 'lt');
   });
+
+  test('take-away receipt totals use every displayed cart item', () {
+    final controller = HomeController();
+    controller.cart.addAll([
+      CartItem(
+        product: const Product(
+          id: 1,
+          name: 'Margarita Pizza',
+          unit: 'pcs',
+          price: 190,
+          image: '',
+        ),
+      ),
+      CartItem(
+        product: const Product(
+          id: 2,
+          name: 'Pizza Macrone',
+          unit: 'pcs',
+          price: 175,
+          image: '',
+        ),
+      ),
+      CartItem(
+        product: const Product(
+          id: 3,
+          name: 'Chakka Chips',
+          unit: 'pcs',
+          price: 110,
+          image: '',
+        ),
+      ),
+    ]);
+    controller.backendSubtotal.value = 190;
+    controller.backendTotal.value = 190;
+
+    expect(controller.subtotal, 190);
+    expect(controller.total, 190);
+    expect(controller.cartItemsSubtotal, 475);
+    expect(controller.cartItemsTotal, 475);
+  });
 }

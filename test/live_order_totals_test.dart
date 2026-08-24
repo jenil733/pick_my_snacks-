@@ -11,7 +11,7 @@ void main() {
   tearDown(Get.reset);
 
   test(
-    'syncs API totals after a cart change and saves the full cart',
+    'does not save on cart changes and saves only on explicit checkout',
     () async {
       final repository = _FakeOrderRepository();
       final staffController = Get.put(StaffController());
@@ -22,6 +22,12 @@ void main() {
       controller.addProduct(controller.products[1]);
       await Future<void>.delayed(const Duration(milliseconds: 400));
 
+      expect(repository.requests, isEmpty);
+      expect(controller.subtotal, greaterThan(0));
+
+      final saved = await controller.saveOrder(staffId: 7);
+
+      expect(saved, isTrue);
       expect(repository.requests, hasLength(1));
       expect(repository.requests.single.staffId, 7);
       expect(
@@ -30,25 +36,6 @@ void main() {
       );
       expect(
         repository.requests.single.products.fold<num>(
-          0,
-          (sum, item) => sum + item.quantity,
-        ),
-        controller.itemCount,
-      );
-      expect(controller.subtotal, 222.22);
-      expect(controller.tax, 11.11);
-      expect(controller.total, 233.33);
-
-      final saved = await controller.saveOrder(staffId: 7);
-
-      expect(saved, isTrue);
-      expect(repository.requests, hasLength(2));
-      expect(
-        repository.requests.last.products,
-        hasLength(controller.cart.length),
-      );
-      expect(
-        repository.requests.last.products.fold<num>(
           0,
           (sum, item) => sum + item.quantity,
         ),
