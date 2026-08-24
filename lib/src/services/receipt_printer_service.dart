@@ -99,13 +99,20 @@ class ReceiptPrinterService {
   }
 
   Future<bool> connect(ThermalPrinterDevice printer) async {
-    final connected = await PrintBluetoothThermal.connect(
-      macPrinterAddress: printer.address,
-    ).timeout(_connectionTimeout, onTimeout: () => false);
-    if (!connected) return false;
+    try {
+      final connected = await PrintBluetoothThermal.connect(
+        macPrinterAddress: printer.address,
+      ).timeout(_connectionTimeout, onTimeout: () => false);
+      if (!connected) return false;
 
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    return isConnected;
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      return isConnected;
+    } catch (_) {
+      // Bluetooth plugins can throw when a stale socket is still owned by a
+      // previous device/session. Report this as a failed connection so the
+      // manager can safely reconnect before any print bytes are sent.
+      return false;
+    }
   }
 
   Future<void> disconnect() async {
@@ -126,9 +133,17 @@ class ReceiptPrinterService {
     if (!await isConnected) {
       throw const ReceiptPrinterException('The printer is not connected.');
     }
-    final printed = await PrintBluetoothThermal.writeBytes(
-      bytes,
-    ).timeout(_printTimeout, onTimeout: () => false);
+    final bool printed;
+    try {
+      printed = await PrintBluetoothThermal.writeBytes(
+        bytes,
+      ).timeout(_printTimeout, onTimeout: () => false);
+    } catch (_) {
+      throw const ReceiptPrinterException(
+        'The printer connection was lost while sending the receipt. '
+        'Reconnect the printer and retry.',
+      );
+    }
     if (!printed) {
       throw ReceiptPrinterException(
         'The printer did not accept the $documentName. Please retry.',

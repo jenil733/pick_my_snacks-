@@ -184,16 +184,30 @@ class PrinterManager {
     _isPrinting = true;
     try {
       await _ensureBluetoothAvailable();
-      await _printerService.disconnect();
-      final connected = await _printerService.connect(
-        ThermalPrinterDevice(name: selected.name, address: selected.address),
+      final device = ThermalPrinterDevice(
+        name: selected.name,
+        address: selected.address,
       );
+      final connected = await _connectWithRetry(device);
       if (!connected) {
         throw PrinterManagerException(
           '${role.label} is unavailable. Check that it is on and retry.',
         );
       }
-      await print();
+      try {
+        await print();
+      } on ReceiptPrinterException catch (error) {
+        // This failure occurs before any bytes are written, so reconnecting is
+        // safe and cannot create a duplicate receipt.
+        if (error.message != 'The printer is not connected.') rethrow;
+        final reconnected = await _connectWithRetry(device);
+        if (!reconnected) {
+          throw PrinterManagerException(
+            '${role.label} disconnected. Turn it on and retry.',
+          );
+        }
+        await print();
+      }
     } on PrinterManagerException {
       rethrow;
     } on ReceiptPrinterException catch (error) {
@@ -210,6 +224,17 @@ class PrinterManager {
       await _printerService.disconnect();
       _isPrinting = false;
     }
+  }
+
+  Future<bool> _connectWithRetry(ThermalPrinterDevice device) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      await _printerService.disconnect();
+      await Future<void>.delayed(
+        Duration(milliseconds: attempt == 0 ? 250 : 600),
+      );
+      if (await _printerService.connect(device)) return true;
+    }
+    return false;
   }
 
   Future<void> _ensureBluetoothAvailable() async {
