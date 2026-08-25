@@ -165,12 +165,14 @@ void main() {
       showTotals: false,
       separateProducts: true,
       endFeedLines: 5,
+      staffName: 'Arun',
       customerName: 'Anu',
       customerPhone: '9876543210',
     );
     final printable = String.fromCharCodes(bytes);
 
     expect(printable, contains('Order No: TA-67890'));
+    expect(printable, contains('Staff: Arun'));
     expect(printable, contains('Customer: Anu'));
     expect(printable, contains('Phone: 9876543210'));
     expect(printable, contains('Item'));

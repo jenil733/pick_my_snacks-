@@ -27,6 +27,7 @@ class ReceiptPrintJob {
     required this.orderNumber,
     this.paperSize = ReceiptPaperSize.mm58,
     this.showRate = true,
+    this.staffName,
     this.customerName,
     this.customerPhone,
   });
@@ -41,6 +42,7 @@ class ReceiptPrintJob {
   final String orderNumber;
   final ReceiptPaperSize paperSize;
   final bool showRate;
+  final String? staffName;
   final String? customerName;
   final String? customerPhone;
 }
@@ -102,6 +104,7 @@ class PrinterManager {
         orderNumber: job.orderNumber,
         paperSize: job.paperSize,
         showRate: job.showRate,
+        staffName: job.staffName,
         customerName: job.customerName,
         customerPhone: job.customerPhone,
       );
@@ -125,6 +128,7 @@ class PrinterManager {
         showTotals: true,
         separateProducts: false,
         endFeedLines: 3,
+        staffName: job.staffName,
         customerName: job.customerName,
         customerPhone: job.customerPhone,
       );

@@ -675,6 +675,7 @@ Future<void> printReceipt(
       ? Get.find<StaffController>()
       : null;
   final selectedStaffId = staffController?.selectedStaff.value?.id;
+  final selectedStaffName = staffController?.selectedStaff.value?.name;
   final orderSaved = isKotFlow
       ? controller.completedKotOrder.value != null ||
             await controller.completeKotOrder(
@@ -721,6 +722,7 @@ Future<void> printReceipt(
             total: total,
             paymentMethod: paymentMethod,
             orderNumber: orderNumber,
+            staffName: selectedStaffName,
             customerName: controller.takeAwayCustomerName.value,
             customerPhone: controller.takeAwayCustomerPhone.value,
           ),
@@ -761,6 +763,7 @@ Future<void> printReceipt(
             paymentMethod: paymentMethod,
             orderNumber: orderNumber,
             paperSize: ReceiptPaperSize.mm58,
+            staffName: selectedStaffName,
             customerName: controller.takeAwayCustomerName.value,
             customerPhone: controller.takeAwayCustomerPhone.value,
           );
@@ -973,6 +976,9 @@ Future<bool> printTakeAwayBill(
       controller.savedOrderNumber.value ??
       'TA-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
   final items = controller.cart.map((item) => item.copy()).toList();
+  final staffName = Get.isRegistered<StaffController>()
+      ? Get.find<StaffController>().selectedStaff.value?.name
+      : null;
 
   if (!Get.isRegistered<PrinterManager>()) {
     _showPrinterToast(context, 'Take Away Printer is not configured.');
@@ -992,6 +998,7 @@ Future<bool> printTakeAwayBill(
         paymentMethod: controller.paymentMethod.value,
         orderNumber: orderNumber,
         showRate: true,
+        staffName: staffName,
         customerName: controller.takeAwayCustomerName.value,
         customerPhone: controller.takeAwayCustomerPhone.value,
       ),

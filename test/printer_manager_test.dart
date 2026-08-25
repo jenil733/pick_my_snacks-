@@ -87,6 +87,7 @@ class _RetryPrinterService implements ReceiptPrinterService {
     bool showTotals = true,
     bool separateProducts = false,
     int endFeedLines = 3,
+    String? staffName,
     String? customerName,
     String? customerPhone,
   }) async {

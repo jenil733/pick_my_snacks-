@@ -166,6 +166,7 @@ class ReceiptPrinterService {
     bool showTotals = true,
     bool separateProducts = false,
     int endFeedLines = 3,
+    String? staffName,
     String? customerName,
     String? customerPhone,
   }) async {
@@ -188,6 +189,7 @@ class ReceiptPrinterService {
       showTotals: showTotals,
       separateProducts: separateProducts,
       endFeedLines: endFeedLines,
+      staffName: staffName,
       customerName: customerName,
       customerPhone: customerPhone,
     );
@@ -243,6 +245,7 @@ class ReceiptPrinterService {
     bool showTotals = true,
     bool separateProducts = false,
     int endFeedLines = 3,
+    String? staffName,
     String? customerName,
     String? customerPhone,
   }) async {
@@ -304,6 +307,12 @@ class ReceiptPrinterService {
       ),
     );
     bytes.addAll(generator.text('Date $date', styles: receiptStyle));
+    final normalizedStaffName = staffName?.trim();
+    if (normalizedStaffName != null && normalizedStaffName.isNotEmpty) {
+      bytes.addAll(
+        generator.text('Staff: $normalizedStaffName', styles: receiptStyle),
+      );
+    }
     final normalizedCustomerName = customerName?.trim();
     if (normalizedCustomerName != null && normalizedCustomerName.isNotEmpty) {
       bytes.addAll(
