@@ -100,7 +100,9 @@ class CartPanel extends StatelessWidget {
                               children: [
                                 SoftIconButton(
                                   icon: Icons.remove,
-                                  onTap: () => controller.decrement(item),
+                                  onTap: controller.isTakeAwayCartLocked
+                                      ? null
+                                      : () => controller.decrement(item),
                                   color: AppColors.textSecondary,
                                   size: 28,
                                 ),
@@ -110,7 +112,9 @@ class CartPanel extends StatelessWidget {
                                 ),
                                 SoftIconButton(
                                   icon: Icons.add,
-                                  onTap: () => controller.increment(item),
+                                  onTap: controller.isTakeAwayCartLocked
+                                      ? null
+                                      : () => controller.increment(item),
                                   size: 28,
                                 ),
                               ],
@@ -122,7 +126,9 @@ class CartPanel extends StatelessWidget {
                                 children: [
                                   SoftIconButton(
                                     icon: Icons.delete_outline,
-                                    onTap: () => _deleteItem(context, item),
+                                    onTap: controller.isTakeAwayCartLocked
+                                        ? null
+                                        : () => _deleteItem(context, item),
                                     color: AppColors.delete,
                                     size: 28,
                                   ),

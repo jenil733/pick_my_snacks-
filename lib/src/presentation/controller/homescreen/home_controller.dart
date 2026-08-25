@@ -2199,6 +2199,7 @@ class HomeController extends GetxController {
       kitchenSelectedItems.contains(item);
 
   void setKitchenItemSelected(CartItem item, bool selected) {
+    if (_rejectLockedTakeAwayCartEdit()) return;
     if (selected) {
       kitchenSelectedItems.add(item);
     } else {
@@ -2811,7 +2812,21 @@ class HomeController extends GetxController {
     }
   }
 
+  static const takeAwayCartLockedMessage =
+      'This Take Away order is already held. Complete it or start a new bill '
+      'before changing products.';
+
+  bool get isTakeAwayCartLocked =>
+      flow.value == PosFlow.takeAway && takeAwayHoldOrderId.value != null;
+
+  bool _rejectLockedTakeAwayCartEdit() {
+    if (!isTakeAwayCartLocked) return false;
+    takeAwayHoldError.value = takeAwayCartLockedMessage;
+    return true;
+  }
+
   void addProduct(Product product) {
+    if (_rejectLockedTakeAwayCartEdit()) return;
     final index = cart.indexWhere(
       (item) =>
           item.product.id == product.id &&
@@ -2829,6 +2844,9 @@ class HomeController extends GetxController {
   }
 
   QrAddResult addProductFromQr(String rawValue) {
+    if (_rejectLockedTakeAwayCartEdit()) {
+      return QrAddResult.failure(takeAwayCartLockedMessage);
+    }
     final value = rawValue.trim();
     if (value.isEmpty) {
       return QrAddResult.failure('The scanned QR code is empty.');
@@ -2896,6 +2914,7 @@ class HomeController extends GetxController {
   }
 
   void increment(CartItem item) {
+    if (_rejectLockedTakeAwayCartEdit()) return;
     if (item.effectiveWeightKg != null) {
       item.manualWeightKg = double.parse(
         (item.editableAmount + 0.1).toStringAsFixed(3),
@@ -2911,10 +2930,12 @@ class HomeController extends GetxController {
   }
 
   void updateItemNotes(CartItem item, String value) {
+    if (_rejectLockedTakeAwayCartEdit()) return;
     item.notes = value;
   }
 
   Future<bool> decrement(CartItem item) async {
+    if (_rejectLockedTakeAwayCartEdit()) return false;
     removeKotQuantityError.value = null;
     _decrementLocal(item);
     log(
@@ -2946,6 +2967,7 @@ class HomeController extends GetxController {
   }
 
   void remove(CartItem item) {
+    if (_rejectLockedTakeAwayCartEdit()) return;
     _markSentKitchenItemChanged(item);
     kitchenSelectedItems.remove(item);
     cart.remove(item);
@@ -3030,6 +3052,7 @@ class HomeController extends GetxController {
   }
 
   String? setItemAmount(CartItem item, double amount) {
+    if (_rejectLockedTakeAwayCartEdit()) return takeAwayCartLockedMessage;
     final isWholeNumber = amount == amount.roundToDouble();
     if (!_usesKilogramWeight(item) && !isWholeNumber) {
       final unit = item.apiUnit.isEmpty ? 'pcs' : item.apiUnit;

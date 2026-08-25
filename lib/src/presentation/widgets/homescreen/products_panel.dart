@@ -153,7 +153,9 @@ class ProductsPanel extends StatelessWidget {
                                     key: ValueKey(
                                       'product-add-another-${product.id}',
                                     ),
-                                    onTap: () => controller.addProduct(product),
+                                    onTap: controller.isTakeAwayCartLocked
+                                        ? null
+                                        : () => controller.addProduct(product),
                                     borderRadius: BorderRadius.circular(8),
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
@@ -193,7 +195,9 @@ class ProductsPanel extends StatelessWidget {
                               : SoftIconButton(
                                   key: ValueKey('product-add-${product.id}'),
                                   icon: Icons.add,
-                                  onTap: () => controller.addProduct(product),
+                                  onTap: controller.isTakeAwayCartLocked
+                                      ? null
+                                      : () => controller.addProduct(product),
                                 );
                         }),
                       ],

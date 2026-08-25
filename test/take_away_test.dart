@@ -616,6 +616,49 @@ void main() {
     },
   );
 
+  test(
+    'locks take-away cart changes after its backend hold is created',
+    () async {
+      final controller = HomeController()..selectFlow(PosFlow.takeAway);
+      const burger = Product(
+        id: 4,
+        name: 'Burger',
+        unit: 'pcs',
+        price: 100,
+        image: '',
+      );
+      const tea = Product(
+        id: 5,
+        name: 'Tea',
+        unit: 'pcs',
+        price: 20,
+        image: '',
+      );
+      controller.addProduct(burger);
+      final heldItem = controller.cart.single;
+      controller.takeAwayHoldOrderId.value = 1001;
+
+      controller.addProduct(tea);
+      controller.increment(heldItem);
+      controller.updateItemNotes(heldItem, 'changed');
+
+      expect(controller.cart, hasLength(1));
+      expect(heldItem.quantity, 1);
+      expect(heldItem.notes, isEmpty);
+      expect(await controller.decrement(heldItem), isFalse);
+      expect(
+        controller.setItemAmount(heldItem, 2),
+        HomeController.takeAwayCartLockedMessage,
+      );
+      expect(
+        controller.addProductFromQr('5').error,
+        HomeController.takeAwayCartLockedMessage,
+      );
+      controller.remove(heldItem);
+      expect(controller.cart.single, same(heldItem));
+    },
+  );
+
   testWidgets('take away billing shows kitchen bill and take away actions', (
     tester,
   ) async {

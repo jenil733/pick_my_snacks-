@@ -546,13 +546,17 @@ class BillQuantityControl extends StatelessWidget {
           _button(
             tooltip: 'Decrease ${item.product.name}',
             icon: Icons.remove_rounded,
-            onPressed: () => controller.decrement(item),
+            onPressed: controller.isTakeAwayCartLocked
+                ? null
+                : () => controller.decrement(item),
           ),
           EditableItemAmount(controller: controller, item: item, width: 36),
           _button(
             tooltip: 'Increase ${item.product.name}',
             icon: Icons.add_rounded,
-            onPressed: () => controller.increment(item),
+            onPressed: controller.isTakeAwayCartLocked
+                ? null
+                : () => controller.increment(item),
           ),
         ],
       ),
@@ -562,7 +566,7 @@ class BillQuantityControl extends StatelessWidget {
   Widget _button({
     required String tooltip,
     required IconData icon,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
   }) {
     return IconButton(
       tooltip: tooltip,

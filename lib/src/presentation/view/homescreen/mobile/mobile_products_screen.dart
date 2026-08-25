@@ -97,7 +97,9 @@ class MobileProductsScreen extends StatelessWidget {
                   ),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    onTap: () => controller.addProduct(product),
+                    onTap: controller.isTakeAwayCartLocked
+                        ? null
+                        : () => controller.addProduct(product),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Row(
@@ -139,8 +141,9 @@ class MobileProductsScreen extends StatelessWidget {
                                   dimension: 42,
                                   child: IconButton.filled(
                                     tooltip: 'Add ${product.name}',
-                                    onPressed: () =>
-                                        controller.addProduct(product),
+                                    onPressed: controller.isTakeAwayCartLocked
+                                        ? null
+                                        : () => controller.addProduct(product),
                                     style: IconButton.styleFrom(
                                       backgroundColor: AppColors.primary,
                                       foregroundColor: Colors.white,
@@ -236,14 +239,18 @@ class _QuantityControl extends StatelessWidget {
           IconButton(
             visualDensity: VisualDensity.compact,
             tooltip: 'Remove one',
-            onPressed: () => controller.decrement(item),
+            onPressed: controller.isTakeAwayCartLocked
+                ? null
+                : () => controller.decrement(item),
             icon: const Icon(Icons.remove_rounded, size: 18),
           ),
           EditableItemAmount(controller: controller, item: item, width: 34),
           IconButton(
             visualDensity: VisualDensity.compact,
             tooltip: 'Add one',
-            onPressed: () => controller.increment(item),
+            onPressed: controller.isTakeAwayCartLocked
+                ? null
+                : () => controller.increment(item),
             icon: const Icon(Icons.add_rounded, size: 18),
           ),
         ],

@@ -130,7 +130,7 @@ class SoftIconButton extends StatelessWidget {
   });
 
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Color color;
   final double size;
 
@@ -140,15 +140,21 @@ class SoftIconButton extends StatelessWidget {
       width: size,
       height: size,
       child: Material(
-        color: color.withValues(alpha: .07),
+        color: color.withValues(alpha: onTap == null ? .03 : .07),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: color.withValues(alpha: .22)),
+          side: BorderSide(
+            color: color.withValues(alpha: onTap == null ? .10 : .22),
+          ),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: onTap,
-          child: Icon(icon, color: color, size: 18),
+          child: Icon(
+            icon,
+            color: onTap == null ? AppColors.textSecondary : color,
+            size: 18,
+          ),
         ),
       ),
     );
@@ -243,7 +249,9 @@ class EditableItemAmount extends StatelessWidget {
     return Tooltip(
       message: 'Tap to edit quantity or weight',
       child: InkWell(
-        onTap: () => showItemAmountDialog(context, controller, item),
+        onTap: controller.isTakeAwayCartLocked
+            ? null
+            : () => showItemAmountDialog(context, controller, item),
         child: SizedBox(
           width: width,
           height: 28,
@@ -309,6 +317,7 @@ class _ExtraItemNoteFieldState extends State<ExtraItemNoteField> {
     return TextField(
       controller: _textController,
       focusNode: _focusNode,
+      enabled: !widget.controller.isTakeAwayCartLocked,
       onChanged: (value) =>
           widget.controller.updateItemNotes(widget.item, value),
       textInputAction: TextInputAction.done,
