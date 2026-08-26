@@ -93,28 +93,80 @@ class PrinterManager {
     return _repository.savePrinter(role, printer);
   }
 
-  Future<void> printReceipt(ReceiptPrintJob job) async {
-    _logReceipt('BILLING', job);
+  Future<void> printReceipt(ReceiptPrintJob job) {
+    return _withPrinter(PrinterRole.billing, () {
+      return _printerService.printBluetoothReceipt(
+        items: job.items,
+        subtotal: job.subtotal,
+        tax: job.tax,
+        discount: job.discount,
+        charge: job.charge,
+        total: job.total,
+        paymentMethod: job.paymentMethod,
+        orderNumber: job.orderNumber,
+        paperSize: job.paperSize,
+        showRate: job.showRate,
+        staffName: job.staffName,
+        customerName: job.customerName,
+        customerPhone: job.customerPhone,
+      );
+    });
   }
 
-  Future<void> printTakeAwayReceipt(ReceiptPrintJob job) async {
-    _logReceipt('TAKE AWAY', job);
+  Future<void> printTakeAwayReceipt(ReceiptPrintJob job) {
+    return _withPrinter(PrinterRole.takeAway, () {
+      return _printerService.printBluetoothReceipt(
+        items: job.items,
+        subtotal: job.subtotal,
+        tax: job.tax,
+        discount: job.discount,
+        charge: job.charge,
+        total: job.total,
+        paymentMethod: job.paymentMethod,
+        orderNumber: job.orderNumber,
+        paperSize: job.paperSize,
+        showRate: job.showRate,
+        showAmount: true,
+        showTotals: true,
+        separateProducts: false,
+        endFeedLines: 3,
+        staffName: job.staffName,
+        customerName: job.customerName,
+        customerPhone: job.customerPhone,
+      );
+    });
   }
 
-  Future<void> printKitchen(KitchenPrintJob job) async {
-    _logKitchen(job);
+  Future<void> printKitchen(KitchenPrintJob job) {
+    return _withPrinter(PrinterRole.kitchen, () async {
+      final bytes = await _kitchenPrinter.buildTicket(job);
+      await _printerService.writeBytes(bytes, documentName: 'kitchen order');
+    });
   }
 
-  Future<void> printDuplicate(DuplicatePrintJob job) async {
-    _logDuplicate(job);
+  Future<void> printDuplicate(DuplicatePrintJob job) {
+    return _withPrinter(PrinterRole.billing, () async {
+      final bytes = await _printerService.buildDuplicateBillBytes(
+        items: job.items,
+        orderNumber: job.orderNumber,
+        paperSize: job.paperSize,
+        staffName: job.staffName,
+      );
+      await _printerService.writeBytes(bytes, documentName: 'duplicate bill');
+    });
   }
 
-  Future<void> testPrint(PrinterRole role) async {
-    log('========================================');
-    log('          ${role.label} TEST PRINT        ');
-    log('========================================');
+  Future<void> testPrint(PrinterRole role) {
+    return _withPrinter(role, () async {
+      final bytes = await _kitchenPrinter.buildTestTicket(
+        roleLabel: role.label,
+        paperSize: ReceiptPaperSize.mm58,
+      );
+      await _printerService.writeBytes(bytes, documentName: 'test print');
+    });
   }
 
+  /*
   void _logReceipt(String title, ReceiptPrintJob job) {
     final b = StringBuffer();
     b.writeln('========================================');
@@ -200,6 +252,7 @@ class PrinterManager {
     b.writeln('========================================');
     log(b.toString());
   }
+  */
 
   Future<void> _withPrinter(
     PrinterRole role,

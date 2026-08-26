@@ -16,6 +16,8 @@ import 'package:pick_my_snacks/src/data/model/processing.dart';
 import 'package:pick_my_snacks/src/data/model/post_kot_model.dart';
 import 'package:pick_my_snacks/src/data/model/remove_kot_product.dart';
 import 'package:pick_my_snacks/src/data/model/hold_order.dart';
+import 'package:pick_my_snacks/src/data/model/remove_kot_quantity.dart';
+
 import 'package:pick_my_snacks/src/data/model/save_order.dart';
 import 'package:pick_my_snacks/src/data/model/take_away_hold.dart';
 import 'package:pick_my_snacks/src/data/model/take_away_processing.dart';
@@ -41,6 +43,7 @@ import 'package:pick_my_snacks/src/domain/usecase/remove_kot_quantity_usecase.da
 import 'package:pick_my_snacks/src/domain/usecase/save_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/take_away_hold_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/take_away_save_order_usecase.dart';
+import 'package:pick_my_snacks/src/presentation/controller/homescreen/cart_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
 
 class Product {
@@ -326,8 +329,10 @@ class HomeController extends GetxController {
   final GetNotificationCountUseCase? _getNotificationCountUseCase;
 
   final searchController = TextEditingController();
+  CartController get _cartController => Get.find<CartController>();
+
   final searchQuery = ''.obs;
-  final cart = <CartItem>[].obs;
+  RxList<CartItem> get cart => _cartController.cart;
   final heldBills = <HeldBill>[].obs;
   final heldOrderSummaries = <HeldOrderSummary>[].obs;
   final products = <Product>[].obs;
@@ -342,10 +347,10 @@ class HomeController extends GetxController {
   final stockNotificationsError = RxnString();
   final outOfStockNotificationsError = RxnString();
   final notificationCountError = RxnString();
-  final paymentMethod = 'cash'.obs;
+  RxString get paymentMethod => _cartController.paymentMethod;
   final isSavingOrder = false.obs;
   final isSavingKotOrder = false.obs;
-  final isSyncingTotals = false.obs;
+  RxBool get isSyncingTotals => _cartController.isSyncingTotals;
   final saveOrderError = RxnString();
   final kotOrderError = RxnString();
   final lastKotOrder = Rxn<KotOrderData>();
@@ -393,15 +398,15 @@ class HomeController extends GetxController {
   final completedTakeAwayOrderView = Rxn<TakeAwayProcessingOrder>();
   final isLoadingCompletedTakeAwayView = false.obs;
   final completedTakeAwayViewError = RxnString();
-  final backendSubtotal = RxnDouble();
-  final backendGst = RxnDouble();
-  final backendTotal = RxnDouble();
-  final discountType = 'none'.obs;
-  final discountValue = 0.0.obs;
-  final discountOffer = ''.obs;
-  final discountReason = ''.obs;
-  final chargeAmount = 0.0.obs;
-  final chargeReason = ''.obs;
+  Rxn<double> get backendSubtotal => _cartController.backendSubtotal;
+  Rxn<double> get backendGst => _cartController.backendGst;
+  Rxn<double> get backendTotal => _cartController.backendTotal;
+  RxString get discountType => _cartController.discountType;
+  Rx<double> get discountValue => _cartController.discountValue;
+  RxString get discountOffer => _cartController.discountOffer;
+  RxString get discountReason => _cartController.discountReason;
+  Rx<double> get chargeAmount => _cartController.chargeAmount;
+  RxString get chargeReason => _cartController.chargeReason;
   final flow = PosFlow.billing.obs;
   final kotStage = KotStage.tables.obs;
   final activeTableNumber = RxnInt();
@@ -2962,9 +2967,43 @@ class HomeController extends GetxController {
   Future<bool> decrement(CartItem item) async {
     if (_rejectLockedTakeAwayCartEdit()) return false;
     removeKotQuantityError.value = null;
+
+    if (item.kotProductReferences.isNotEmpty) {
+      final references = item.kotProductReferences
+          .where((reference) => reference.detailId != null)
+          .toList(growable: false);
+      if (references.isNotEmpty) {
+        final reference = references.last;
+        final useCase = _removeKotQuantityUseCase;
+        if (useCase != null) {
+          try {
+            final response = await useCase(
+              RemoveKotQuantityRequest(
+                orderId: reference.orderId,
+                detailId: reference.detailId!,
+                removeQuantity: item.effectiveWeightKg != null ? 0.1 : 1,
+              ),
+            );
+            if (response.status == false) {
+              removeKotQuantityError.value =
+                  response.message ?? 'Unable to update the quantity.';
+              return false;
+            }
+          } on DioException catch (error) {
+            removeKotQuantityError.value = _saveOrderApiError(error);
+            return false;
+          } catch (error) {
+            removeKotQuantityError.value =
+                'Unable to update the quantity. Please try again.';
+            return false;
+          }
+        }
+      }
+    }
+
     _decrementLocal(item);
     log(
-      'Decremented product ${item.product.id} in local state only.',
+      'Decremented product ${item.product.id} in backend and local state.',
       name: 'RemoveKotQuantityController',
     );
     return true;
@@ -3031,39 +3070,50 @@ class HomeController extends GetxController {
     try {
       // A cart line can contain rows from more than one KOT submission. Remove
       // every saved detail row before clearing the combined local cart line.
+      bool networkError = false;
       for (final reference in references) {
-        final response = await useCase(
-          RemoveKotProductRequest(
-            orderId: reference.orderId,
-            detailId: reference.detailId!,
-          ),
-        );
-        if (response.status == false) {
+        try {
+          final response = await useCase(
+            RemoveKotProductRequest(
+              orderId: reference.orderId,
+              detailId: reference.detailId!,
+            ),
+          );
+          // Only remove the reference if the API successfully processes it.
+          // If the API returns false (e.g. item not found / already deleted),
+          // we still proceed because the end goal is to remove it locally anyway.
+          if (response.status == true) {
+            item.kotProductReferences.remove(reference);
+          }
+        } on DioException catch (error) {
+          networkError = true;
+          removeKotProductError.value = _saveOrderApiError(error);
+          break;
+        } catch (error, stackTrace) {
+          networkError = true;
           removeKotProductError.value =
-              response.message ?? 'Unable to remove the product.';
-          return false;
+              'Unable to remove the product. Please try again.';
+          log(
+            'Unexpected KOT product-removal error',
+            name: 'RemoveKotProductController',
+            error: error,
+            stackTrace: stackTrace,
+          );
+          break;
         }
-        item.kotProductReferences.remove(reference);
       }
 
-      _removeKotProductLocally(item);
-      log(
-        'Removed product ${item.product.id} from the backend KOT and local state.',
-        name: 'RemoveKotProductController',
-      );
-      return true;
-    } on DioException catch (error) {
-      removeKotProductError.value = _saveOrderApiError(error);
-      return false;
-    } catch (error, stackTrace) {
-      removeKotProductError.value =
-          'Unable to remove the product. Please try again.';
-      log(
-        'Unexpected KOT product-removal error',
-        name: 'RemoveKotProductController',
-        error: error,
-        stackTrace: stackTrace,
-      );
+      // We only abort local deletion if there was an actual network/system exception.
+      // If the backend simply returned status: false (because the product was already deleted),
+      // we still want to remove it locally to keep the UI in sync.
+      if (!networkError) {
+        _removeKotProductLocally(item);
+        log(
+          'Removed product ${item.product.id} from the backend KOT and local state.',
+          name: 'RemoveKotProductController',
+        );
+        return true;
+      }
       return false;
     } finally {
       isRemovingKotProduct.value = false;
