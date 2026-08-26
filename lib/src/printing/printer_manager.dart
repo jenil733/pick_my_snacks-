@@ -93,7 +93,11 @@ class PrinterManager {
     return _repository.savePrinter(role, printer);
   }
 
-  Future<void> printReceipt(ReceiptPrintJob job) {
+  Future<void> printReceipt(ReceiptPrintJob job) async {
+    if (kDebugMode) {
+      _logReceipt('BILLING', job);
+      return;
+    }
     return _withPrinter(PrinterRole.billing, () {
       return _printerService.printBluetoothReceipt(
         items: job.items,
@@ -113,7 +117,11 @@ class PrinterManager {
     });
   }
 
-  Future<void> printTakeAwayReceipt(ReceiptPrintJob job) {
+  Future<void> printTakeAwayReceipt(ReceiptPrintJob job) async {
+    if (kDebugMode) {
+      _logReceipt('TAKE-AWAY', job);
+      return;
+    }
     return _withPrinter(PrinterRole.takeAway, () {
       return _printerService.printBluetoothReceipt(
         items: job.items,
@@ -137,14 +145,22 @@ class PrinterManager {
     });
   }
 
-  Future<void> printKitchen(KitchenPrintJob job) {
+  Future<void> printKitchen(KitchenPrintJob job) async {
+    if (kDebugMode) {
+      _logKitchen(job);
+      return;
+    }
     return _withPrinter(PrinterRole.kitchen, () async {
       final bytes = await _kitchenPrinter.buildTicket(job);
       await _printerService.writeBytes(bytes, documentName: 'kitchen order');
     });
   }
 
-  Future<void> printDuplicate(DuplicatePrintJob job) {
+  Future<void> printDuplicate(DuplicatePrintJob job) async {
+    if (kDebugMode) {
+      _logDuplicate(job);
+      return;
+    }
     return _withPrinter(PrinterRole.billing, () async {
       final bytes = await _printerService.buildDuplicateBillBytes(
         items: job.items,
@@ -156,7 +172,15 @@ class PrinterManager {
     });
   }
 
-  Future<void> testPrint(PrinterRole role) {
+  Future<void> testPrint(PrinterRole role) async {
+    if (kDebugMode) {
+      log('========================================');
+      log('           ${role.label} TEST               ');
+      log('========================================');
+      log('Printer configured successfully');
+      log('========================================');
+      return;
+    }
     return _withPrinter(role, () async {
       final bytes = await _kitchenPrinter.buildTestTicket(
         roleLabel: role.label,
@@ -166,7 +190,7 @@ class PrinterManager {
     });
   }
 
-  /*
+
   void _logReceipt(String title, ReceiptPrintJob job) {
     final b = StringBuffer();
     b.writeln('========================================');
@@ -252,7 +276,7 @@ class PrinterManager {
     b.writeln('========================================');
     log(b.toString());
   }
-  */
+
 
   Future<void> _withPrinter(
     PrinterRole role,

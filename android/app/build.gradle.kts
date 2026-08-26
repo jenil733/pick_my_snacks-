@@ -15,7 +15,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.pick_my_snacks"
+    namespace = "com.novel.pickmysnacks"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -37,7 +37,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.pick_my_snacks"
+        applicationId = "com.novel.pickmysnacks"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Flutter 3.44 and shared_preferences_android require API 24.
