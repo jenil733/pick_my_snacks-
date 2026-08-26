@@ -2968,42 +2968,9 @@ class HomeController extends GetxController {
     if (_rejectLockedTakeAwayCartEdit()) return false;
     removeKotQuantityError.value = null;
 
-    if (item.kotProductReferences.isNotEmpty) {
-      final references = item.kotProductReferences
-          .where((reference) => reference.detailId != null)
-          .toList(growable: false);
-      if (references.isNotEmpty) {
-        final reference = references.last;
-        final useCase = _removeKotQuantityUseCase;
-        if (useCase != null) {
-          try {
-            final response = await useCase(
-              RemoveKotQuantityRequest(
-                orderId: reference.orderId,
-                detailId: reference.detailId!,
-                removeQuantity: item.effectiveWeightKg != null ? 0.1 : 1,
-              ),
-            );
-            if (response.status == false) {
-              removeKotQuantityError.value =
-                  response.message ?? 'Unable to update the quantity.';
-              return false;
-            }
-          } on DioException catch (error) {
-            removeKotQuantityError.value = _saveOrderApiError(error);
-            return false;
-          } catch (error) {
-            removeKotQuantityError.value =
-                'Unable to update the quantity. Please try again.';
-            return false;
-          }
-        }
-      }
-    }
-
     _decrementLocal(item);
     log(
-      'Decremented product ${item.product.id} in backend and local state.',
+      'Decremented product ${item.product.id} in local state only.',
       name: 'RemoveKotQuantityController',
     );
     return true;
