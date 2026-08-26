@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:developer';
+import 'package:flutter/foundation.dart';
 
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
 import 'package:pick_my_snacks/src/printing/kitchen_printer.dart';
@@ -67,7 +69,7 @@ class PrinterManager {
   final PrinterRepository _repository;
   final ReceiptPrinterService _printerService;
   final KitchenPrinter _kitchenPrinter;
-  bool _isPrinting = false;
+  Future<void>? _currentPrintJob;
 
   PrinterSettingsModel? printerFor(PrinterRole role) {
     return _repository.getPrinter(role);
@@ -91,88 +93,145 @@ class PrinterManager {
     return _repository.savePrinter(role, printer);
   }
 
-  Future<void> printReceipt(ReceiptPrintJob job) {
-    return _withPrinter(PrinterRole.billing, () {
-      return _printerService.printBluetoothReceipt(
-        items: job.items,
-        subtotal: job.subtotal,
-        tax: job.tax,
-        discount: job.discount,
-        charge: job.charge,
-        total: job.total,
-        paymentMethod: job.paymentMethod,
-        orderNumber: job.orderNumber,
-        paperSize: job.paperSize,
-        showRate: job.showRate,
-        staffName: job.staffName,
-        customerName: job.customerName,
-        customerPhone: job.customerPhone,
-      );
-    });
+  Future<void> printReceipt(ReceiptPrintJob job) async {
+    _logReceipt('BILLING', job);
   }
 
-  Future<void> printTakeAwayReceipt(ReceiptPrintJob job) {
-    return _withPrinter(PrinterRole.takeAway, () {
-      return _printerService.printBluetoothReceipt(
-        items: job.items,
-        subtotal: job.subtotal,
-        tax: job.tax,
-        discount: job.discount,
-        charge: job.charge,
-        total: job.total,
-        paymentMethod: job.paymentMethod,
-        orderNumber: job.orderNumber,
-        paperSize: job.paperSize,
-        showRate: job.showRate,
-        showAmount: true,
-        showTotals: true,
-        separateProducts: false,
-        endFeedLines: 3,
-        staffName: job.staffName,
-        customerName: job.customerName,
-        customerPhone: job.customerPhone,
-      );
-    });
+  Future<void> printTakeAwayReceipt(ReceiptPrintJob job) async {
+    _logReceipt('TAKE AWAY', job);
   }
 
-  Future<void> printKitchen(KitchenPrintJob job) {
-    return _withPrinter(PrinterRole.kitchen, () async {
-      final bytes = await _kitchenPrinter.buildTicket(job);
-      await _printerService.writeBytes(bytes, documentName: 'kitchen order');
-    });
+  Future<void> printKitchen(KitchenPrintJob job) async {
+    _logKitchen(job);
   }
 
-  Future<void> printDuplicate(DuplicatePrintJob job) {
-    return _withPrinter(PrinterRole.billing, () async {
-      final bytes = await _printerService.buildDuplicateBillBytes(
-        items: job.items,
-        orderNumber: job.orderNumber,
-        paperSize: job.paperSize,
-        staffName: job.staffName,
-      );
-      await _printerService.writeBytes(bytes, documentName: 'duplicate bill');
-    });
+  Future<void> printDuplicate(DuplicatePrintJob job) async {
+    _logDuplicate(job);
   }
 
-  Future<void> testPrint(PrinterRole role) {
-    return _withPrinter(role, () async {
-      final bytes = await _kitchenPrinter.buildTestTicket(
-        roleLabel: role.label,
-        paperSize: ReceiptPaperSize.mm58,
+  Future<void> testPrint(PrinterRole role) async {
+    log('========================================');
+    log('          ${role.label} TEST PRINT        ');
+    log('========================================');
+  }
+
+  void _logReceipt(String title, ReceiptPrintJob job) {
+    final b = StringBuffer();
+    b.writeln('========================================');
+    b.writeln('           $title RECEIPT               ');
+    b.writeln('========================================');
+    b.writeln('Order Number: ${job.orderNumber}');
+    if (job.customerName != null && job.customerName!.isNotEmpty) {
+      b.writeln('Customer: ${job.customerName}');
+    }
+    if (job.customerPhone != null && job.customerPhone!.isNotEmpty) {
+      b.writeln('Phone: ${job.customerPhone}');
+    }
+    b.writeln('----------------------------------------');
+    b.writeln('Item                          Qty   Rate');
+    b.writeln('----------------------------------------');
+    for (final item in job.items) {
+      final name = item.product.name.padRight(28);
+      final qty = item.quantity.toString().padLeft(3);
+      final rate = item.product.price.toStringAsFixed(2).padLeft(6);
+      b.writeln(
+        '${name.substring(0, name.length > 28 ? 28 : name.length)} $qty  $rate',
       );
-      await _printerService.writeBytes(bytes, documentName: 'test print');
-    });
+    }
+    b.writeln('----------------------------------------');
+    b.writeln(
+      'Subtotal:                     ${job.subtotal.toStringAsFixed(2)}',
+    );
+    b.writeln('Tax:                          ${job.tax.toStringAsFixed(2)}');
+    b.writeln(
+      'Discount:                     ${job.discount.toStringAsFixed(2)}',
+    );
+    b.writeln('Charge:                       ${job.charge.toStringAsFixed(2)}');
+    b.writeln('----------------------------------------');
+    b.writeln('TOTAL:                        ${job.total.toStringAsFixed(2)}');
+    b.writeln('Payment: ${job.paymentMethod}');
+    b.writeln('========================================');
+    log(b.toString());
+  }
+
+  void _logKitchen(KitchenPrintJob job) {
+    final b = StringBuffer();
+    b.writeln('========================================');
+    b.writeln('             ${job.title}               ');
+    b.writeln('========================================');
+    b.writeln('Order: ${job.orderNumber}');
+    if (job.tableNumber != null && job.tableNumber!.isNotEmpty) {
+      b.writeln('Table: ${job.tableNumber}');
+    }
+    if (job.staffName != null && job.staffName!.isNotEmpty) {
+      b.writeln('Staff: ${job.staffName}');
+    }
+    b.writeln('----------------------------------------');
+    b.writeln('Item                Unit     Qty');
+    b.writeln('----------------------------------------');
+    for (final item in job.items) {
+      final name = item.product.name.padRight(19);
+      final unit = item.displayUnit.padRight(8);
+      final qty = item.quantity.toString().padLeft(3);
+      b.writeln(
+        '${name.substring(0, name.length > 19 ? 19 : name.length)} $unit $qty',
+      );
+      if (item.notes.isNotEmpty) {
+        b.writeln('  EXTRA: ${item.notes}');
+      }
+    }
+    b.writeln('========================================');
+    log(b.toString());
+  }
+
+  void _logDuplicate(DuplicatePrintJob job) {
+    final b = StringBuffer();
+    b.writeln('========================================');
+    b.writeln('             DUPLICATE BILL             ');
+    b.writeln('========================================');
+    b.writeln('Order: ${job.orderNumber}');
+    if (job.staffName != null && job.staffName!.isNotEmpty) {
+      b.writeln('Staff: ${job.staffName}');
+    }
+    b.writeln('----------------------------------------');
+    for (final item in job.items) {
+      b.writeln('${item.quantity}x ${item.product.name}');
+    }
+    b.writeln('========================================');
+    log(b.toString());
   }
 
   Future<void> _withPrinter(
     PrinterRole role,
     Future<void> Function() print,
   ) async {
-    if (_isPrinting) {
-      throw const PrinterManagerException(
-        'Another print is in progress. Please wait and retry.',
-      );
+    final completer = Completer<void>();
+    final previousJob = _currentPrintJob;
+    // Suppress unhandled exceptions on the queue itself. The caller still gets the error via rethrow.
+    _currentPrintJob = completer.future.catchError((_) {});
+
+    if (previousJob != null) {
+      await previousJob.catchError((_) {});
     }
+
+    try {
+      await _executePrintJob(role, print);
+      completer.complete();
+    } catch (e, st) {
+      completer.completeError(e, st);
+      rethrow;
+    } finally {
+      if (_currentPrintJob != null) {
+        // If the queue is empty after us, clear it
+        _currentPrintJob = null;
+      }
+    }
+  }
+
+  Future<void> _executePrintJob(
+    PrinterRole role,
+    Future<void> Function() print,
+  ) async {
     final selected = _repository.getPrinter(role);
     if (selected == null) {
       throw PrinterManagerException(
@@ -185,7 +244,6 @@ class PrinterManager {
       );
     }
 
-    _isPrinting = true;
     try {
       await _ensureBluetoothAvailable();
       final device = ThermalPrinterDevice(
@@ -226,7 +284,6 @@ class PrinterManager {
       );
     } finally {
       await _printerService.disconnect();
-      _isPrinting = false;
     }
   }
 

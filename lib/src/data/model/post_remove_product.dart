@@ -1,11 +1,11 @@
-class remove {
+class PostRemoveProduct {
   bool? status;
   String? message;
   Data? data;
 
-  remove({this.status, this.message, this.data});
+  PostRemoveProduct({this.status, this.message, this.data});
 
-  remove.fromJson(Map<String, dynamic> json) {
+  PostRemoveProduct.fromJson(Map<String, dynamic> json) {
     status = json['status'];
     message = json['message'];
     data = json['data'] != null ? Data.fromJson(json['data']) : null;

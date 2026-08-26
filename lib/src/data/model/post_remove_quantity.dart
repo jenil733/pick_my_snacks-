@@ -1,11 +1,11 @@
-class removequantity {
+class PostRemoveQuantity {
   bool? status;
   String? message;
   Data? data;
 
-  removequantity({this.status, this.message, this.data});
+  PostRemoveQuantity({this.status, this.message, this.data});
 
-  removequantity.fromJson(Map<String, dynamic> json) {
+  PostRemoveQuantity.fromJson(Map<String, dynamic> json) {
     status = json['status'];
     message = json['message'];
     data = json['data'] != null ? Data.fromJson(json['data']) : null;

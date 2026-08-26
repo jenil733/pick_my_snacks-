@@ -84,6 +84,7 @@ class _CompletedOrderBody extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       children: [
         Card(
+          color: AppColors.surface,
           child: Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
@@ -131,12 +132,17 @@ class _CompletedOrderBody extends StatelessWidget {
         else
           ...order.products.map(
             (product) => Card(
+              color: AppColors.surface,
               child: ListTile(
                 title: Text(
                   product.productName ?? 'Product ${product.productId ?? '-'}',
                 ),
                 subtitle: Text(
-                  '${product.quantity ?? '-'} ${product.unit ?? ''}'.trim(),
+                  product?.unit == 'kg'
+                      ? '${product.quantity ?? '-'} ${product.unit ?? ''}'
+                            .trim()
+                      : '${num.parse(product.quantity ?? '0.00').toInt()} ${product.unit ?? ''}'
+                            .trim(),
                 ),
                 trailing: Text(
                   '₹${(product.rowTotal ?? 0).toStringAsFixed(2)}',
@@ -155,14 +161,14 @@ class _CompletedOrderBody extends StatelessWidget {
               children: [
                 const Text(
                   'Total',
-                  style: TextStyle(color: Colors.white, fontSize: 18),
+                  style: TextStyle(color: AppColors.text, fontSize: 18),
                 ),
                 Text(
                   '₹${total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                  style: TextStyle(
+                    color: AppColors.text,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],

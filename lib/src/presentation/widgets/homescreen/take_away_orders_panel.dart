@@ -253,7 +253,7 @@ class _TakeAwayOrderCard extends StatelessWidget {
         ? order.orderId!
         : '#${order.id ?? '-'}';
     return Card(
-      color: onView == null ? null : const Color(0xFFE8F5E9),
+      color: onView == null ? AppColors.surface : AppColors.yellowLight,
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -265,19 +265,21 @@ class _TakeAwayOrderCard extends StatelessWidget {
                 Expanded(
                   child: Text(orderLabel, style: TextHelper.sectionTitle),
                 ),
+
                 if (onView != null)
                   const Chip(
-                    backgroundColor: Color(0xFFC8E6C9),
+                    backgroundColor: AppColors.success,
                     label: Text(
                       'Completed',
                       style: TextStyle(
-                        color: Color(0xFF1B5E20),
+                        color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
               ],
             ),
+            SizedBox(height: 12),
             if (order.customerName?.trim().isNotEmpty == true)
               Text('Customer: ${order.customerName}'),
             if (order.customerPhone?.trim().isNotEmpty == true)

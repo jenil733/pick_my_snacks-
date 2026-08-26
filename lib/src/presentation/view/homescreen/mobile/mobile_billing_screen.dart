@@ -100,7 +100,7 @@ class MobileBillingScreen extends StatelessWidget {
                                 children: [
                                   Row(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                        CrossAxisAlignment.center,
                                     children: [
                                       if (controller.flow.value ==
                                               PosFlow.kot ||
@@ -113,6 +113,17 @@ class MobileBillingScreen extends StatelessWidget {
                                               ? 'Include ${item.product.name} in Kitchen Bill'
                                               : 'Send ${item.product.name} to kitchen',
                                           child: Checkbox(
+                                            activeColor: AppColors.primaryDark,
+                                            side: BorderSide(
+                                              color: AppColors.primaryDark,
+                                              width: 2.1,
+                                            ),
+
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+
                                             value: controller
                                                 .isKitchenItemSelected(item),
                                             onChanged: (value) => controller
@@ -333,14 +344,17 @@ class MobileBillingScreen extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed:
                     controller.cart.isEmpty ||
+                        controller.kitchenSelectedItems.isEmpty ||
                         controller.isSavingTakeAwayHold.value ||
                         (controller.takeAwayHoldOrderId.value != null &&
-                            controller.lastKitchenOrderItems.isEmpty)
-                    ? null
+                            controller.lastKitchenOrderItems.isEmpty &&
+                            !controller.hasTakeAwayPendingKitchenItems)
+                        ? null
                     : () => sendTakeAwayKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: Text(
-                  controller.takeAwayHoldOrderId.value != null
+                  controller.takeAwayHoldOrderId.value != null &&
+                          !controller.hasTakeAwayPendingKitchenItems
                       ? 'Retry Kitchen Bill'
                       : 'Kitchen Bill',
                 ),

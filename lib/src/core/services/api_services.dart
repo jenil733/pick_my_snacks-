@@ -20,15 +20,15 @@ class ApiService {
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
-          log('${options.method} ${options.uri}', name: 'ApiRequest');
+          // log('${options.method} ${options.uri}', name: 'ApiRequest');
           handler.next(options);
         },
         onResponse: (response, handler) {
-          log(
-            '${response.requestOptions.method} '
-            '${response.requestOptions.uri} -> ${response.statusCode}',
-            name: 'ApiResponse',
-          );
+          // log(
+          //   '${response.requestOptions.method} '
+          //   '${response.requestOptions.uri} -> ${response.statusCode}',
+          //   name: 'ApiResponse',
+          // );
           handler.next(response);
         },
         onError: (error, handler) async {

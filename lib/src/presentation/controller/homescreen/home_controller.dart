@@ -424,11 +424,12 @@ class HomeController extends GetxController {
   Timer? _tableStatusSyncTimer;
   bool _isRefreshingTableStatuses = false;
   Worker? _staffSelectionWorker;
-  int _totalsSyncRevision = 0;
+
   final Set<int> _resumedHeldOrderIds = <int>{};
   final Set<int> _deletedHeldOrderIds = <int>{};
   final Map<int, List<CartItem>> _heldItemSnapshots = <int, List<CartItem>>{};
   final Map<int, Map<String, int>> _kitchenSentQuantities = {};
+  final Map<String, int> _takeAwaySentQuantities = {};
   final Map<int, Set<int>> _kotHoldOrderIds = {};
   final Set<int> _kotOrdersNeedingReconciliation = <int>{};
   final Set<int> _emptyKotTablesBeingClosed = <int>{};
@@ -1806,6 +1807,7 @@ class HomeController extends GetxController {
       takeAwayProcessingOrders.removeWhere(
         (order) => (order.holdOrderId ?? order.id) == targetId,
       );
+      _takeAwaySentQuantities.clear();
       if (completesCurrentOrder) isTakeAwayOrderCompleted.value = true;
       log(
         'Take-away order completed from hold $targetId.',
@@ -2002,9 +2004,10 @@ class HomeController extends GetxController {
   }) async {
     if (isSavingTakeAwayHold.value) return false;
     if (takeAwayHoldOrderId.value != null) {
-      takeAwayHoldError.value =
-          'This take-away Kitchen Bill is already in Pending orders.';
-      return false;
+      // Allow updating/re-printing KOT by ignoring the hold block as per request.
+      // takeAwayHoldError.value =
+      //     'This take-away Kitchen Bill is already in Pending orders.';
+      // return false;
     }
     final useCase = _takeAwayHoldUseCase;
     if (useCase == null) {
@@ -2079,6 +2082,8 @@ class HomeController extends GetxController {
         return false;
       }
 
+      final pendingToPrint = takeAwayPendingKitchenItems;
+
       savedOrderNumber.value = orderNumber;
       final holdId = order?.id;
       takeAwayHoldOrderId.value = holdId;
@@ -2087,8 +2092,14 @@ class HomeController extends GetxController {
       backendSubtotal.value = order?.subtotal;
       backendGst.value = order?.gst;
       backendTotal.value = order?.total;
+
+      for (final item in pendingToPrint) {
+        final currentSent = _takeAwaySentQuantities[item.uniqueId] ?? 0;
+        _takeAwaySentQuantities[item.uniqueId] = currentSent + item.quantity;
+      }
+
       lastKitchenOrderItems.assignAll(
-        kitchenSelectedItems.map((item) => item.copy()),
+        pendingToPrint.map((item) => item.copy()),
       );
       log(
         'Take-away kitchen bill saved. Order ID: $orderNumber',
@@ -2121,7 +2132,6 @@ class HomeController extends GetxController {
   Future<bool> prepareTakeAwayOrderForCompletion({
     required int? staffId,
   }) async {
-    if (takeAwayHoldOrderId.value != null) return true;
     return saveTakeAwayKitchenBill(
       staffId: staffId,
       selectedOnly: false,
@@ -2175,6 +2185,22 @@ class HomeController extends GetxController {
 
   bool get hasSelectedPendingKitchenItems =>
       selectedPendingKitchenItems.isNotEmpty;
+
+  List<CartItem> get takeAwayPendingKitchenItems {
+    return cart
+        .map((item) {
+          if (!kitchenSelectedItems.contains(item)) return null;
+          final pendingQuantity =
+              item.quantity - (_takeAwaySentQuantities[item.uniqueId] ?? 0);
+          if (pendingQuantity <= 0) return null;
+          return item.copy()..quantity = pendingQuantity;
+        })
+        .whereType<CartItem>()
+        .toList();
+  }
+
+  bool get hasTakeAwayPendingKitchenItems =>
+      takeAwayPendingKitchenItems.isNotEmpty;
 
   List<CartItem> _pendingKitchenItems({bool selectedOnly = false}) {
     final tableId = activeTableNumber.value;
@@ -2816,8 +2842,7 @@ class HomeController extends GetxController {
       'This Take Away order is already held. Complete it or start a new bill '
       'before changing products.';
 
-  bool get isTakeAwayCartLocked =>
-      flow.value == PosFlow.takeAway && takeAwayHoldOrderId.value != null;
+  bool get isTakeAwayCartLocked => false;
 
   bool _rejectLockedTakeAwayCartEdit() {
     if (!isTakeAwayCartLocked) return false;
@@ -3109,6 +3134,7 @@ class HomeController extends GetxController {
   void clearCart() {
     kitchenSelectedItems.clear();
     cart.clear();
+    _takeAwaySentQuantities.clear();
     _queueOrderTotalsSync();
   }
 
@@ -3130,6 +3156,7 @@ class HomeController extends GetxController {
     takeAwayCustomerPhone.value = '';
     isCustomerDetailsPrompted.value = false;
     takeAwayHoldOrderId.value = null;
+    _takeAwaySentQuantities.clear();
     takeAwaySaveOrderError.value = null;
     isTakeAwayOrderCompleted.value = false;
     takeAwayProcessingOrders.clear();
@@ -3223,11 +3250,6 @@ class HomeController extends GetxController {
     );
   }
 
-  int? get _selectedStaffId {
-    if (!Get.isRegistered<StaffController>()) return null;
-    return Get.find<StaffController>().selectedStaff.value?.id;
-  }
-
   void _useKotTableStaff({required int? staffId, required String? staffName}) {
     if (!Get.isRegistered<StaffController>()) return;
     final normalizedName = staffName?.trim();
@@ -3278,7 +3300,7 @@ class HomeController extends GetxController {
   void _cancelTotalsSync() {
     _totalsSyncTimer?.cancel();
     _totalsSyncTimer = null;
-    _totalsSyncRevision++;
+
     isSyncingTotals.value = false;
   }
 

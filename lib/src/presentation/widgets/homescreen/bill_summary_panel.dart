@@ -209,14 +209,17 @@ class BillSummaryPanel extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed:
                     controller.cart.isEmpty ||
+                        controller.kitchenSelectedItems.isEmpty ||
                         controller.isSavingTakeAwayHold.value ||
                         (controller.takeAwayHoldOrderId.value != null &&
-                            controller.lastKitchenOrderItems.isEmpty)
+                            controller.lastKitchenOrderItems.isEmpty &&
+                            !controller.hasTakeAwayPendingKitchenItems)
                     ? null
                     : () => sendTakeAwayKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: Text(
-                  controller.takeAwayHoldOrderId.value != null
+                  controller.takeAwayHoldOrderId.value != null &&
+                          !controller.hasTakeAwayPendingKitchenItems
                       ? 'Retry Kitchen Bill'
                       : 'Kitchen Bill',
                 ),
@@ -862,8 +865,10 @@ Future<bool> sendTakeAwayKotBill(
   final staffController = Get.isRegistered<StaffController>()
       ? Get.find<StaffController>()
       : null;
+
   if (controller.takeAwayHoldOrderId.value != null &&
-      controller.lastKitchenOrderItems.isNotEmpty) {
+      controller.lastKitchenOrderItems.isNotEmpty &&
+      !controller.hasTakeAwayPendingKitchenItems) {
     final printed = await _printKitchenTicket(
       context,
       items: controller.lastKitchenOrderItems
@@ -878,6 +883,7 @@ Future<bool> sendTakeAwayKotBill(
     if (printed) controller.confirmKitchenOrderPrinted();
     return true;
   }
+
   final selectedItems = controller.cart
       .where(controller.isKitchenItemSelected)
       .map((item) => item.copy())
@@ -905,7 +911,9 @@ Future<bool> sendTakeAwayKotBill(
   }
   final printed = await _printKitchenTicket(
     context,
-    items: selectedItems,
+    items: controller.lastKitchenOrderItems
+        .map((item) => item.copy())
+        .toList(growable: false),
     orderNumber: controller.savedOrderNumber.value ?? '',
     staffName: staffController?.selectedStaff.value?.name,
     customerName: controller.takeAwayCustomerName.value,

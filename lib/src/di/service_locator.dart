@@ -67,6 +67,8 @@ import 'package:pick_my_snacks/src/domain/usecase/resume_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/remove_kot_product_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/remove_kot_quantity_usecase.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
+
+import 'package:pick_my_snacks/src/presentation/controller/homescreen/cart_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/login/login_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
 import 'package:pick_my_snacks/src/printing/kitchen_printer.dart';
@@ -438,6 +440,10 @@ Future<String> setupServiceLocator() async {
       ),
       fenix: true,
     );
+  }
+
+  if (!Get.isRegistered<CartController>()) {
+    Get.lazyPut<CartController>(() => CartController(), fenix: true);
   }
 
   if (!Get.isRegistered<HomeController>()) {

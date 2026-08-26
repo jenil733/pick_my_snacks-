@@ -12,15 +12,15 @@ class TableStatusRepositoryImpl implements TableStatusRepository {
 
   @override
   Future<TableStatusResponse> getTableStatuses() async {
-    log('GET ${ApiRoutes.tableStatus}', name: 'KotTableStatus');
+    // log('GET ${ApiRoutes.tableStatus}', name: 'KotTableStatus');
     final response = await _apiService.get(ApiRoutes.tableStatus);
-    log('Response: $response', name: 'KotTableStatus');
+    // log('Response: $response', name: 'KotTableStatus');
     final result = TableStatusResponse.fromJson(response);
-    log(
-      'Status: ${result.status}, message: ${result.message}, '
-      'tables: ${result.data?.length ?? 0}',
-      name: 'KotTableStatus',
-    );
+    // log(
+    //   'Status: ${result.status}, message: ${result.message}, '
+    //   'tables: ${result.data?.length ?? 0}',
+    //   name: 'KotTableStatus',
+    // );
     return result;
   }
 }
