@@ -2376,7 +2376,9 @@ class HomeController extends GetxController {
   /// sent to [saveKitchenOrder]. Unselected products stay out of the
   /// `kot_hold_save_order` request when the final bill is closed.
   Future<bool> prepareKotOrderForCompletion({required int? staffId}) async {
-    return reconcileEditedKotOrder(staffId: staffId);
+    if (!await reconcileEditedKotOrder(staffId: staffId)) return false;
+    if (pendingKitchenItems.isEmpty) return true;
+    return saveKitchenOrder(staffId: staffId, prepareForKitchenPrint: false);
   }
 
   static bool _isMissingHoldBill(String? message) {
