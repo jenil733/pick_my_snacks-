@@ -259,9 +259,10 @@ class PrinterManager {
     Future<void> Function() print,
   ) async {
     final completer = Completer<void>();
+    final myFuture = completer.future.catchError((_) {});
     final previousJob = _currentPrintJob;
     // Suppress unhandled exceptions on the queue itself. The caller still gets the error via rethrow.
-    _currentPrintJob = completer.future.catchError((_) {});
+    _currentPrintJob = myFuture;
 
     if (previousJob != null) {
       await previousJob.catchError((_) {});
@@ -274,8 +275,8 @@ class PrinterManager {
       completer.completeError(e, st);
       rethrow;
     } finally {
-      if (_currentPrintJob != null) {
-        // If the queue is empty after us, clear it
+      if (identical(_currentPrintJob, myFuture)) {
+        // Only clear the queue if no newer jobs were added behind us
         _currentPrintJob = null;
       }
     }
