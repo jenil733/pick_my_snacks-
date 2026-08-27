@@ -18,7 +18,7 @@ class KotSaveRepositoryImpl implements KotSaveRepository {
     log('Response: $response', name: 'KotSaveOrder');
     final result = KotSaveResponse.fromJson(response);
     log(
-      'Status: ${result.status}, message: ${result.message}',
+      'Status: ${result.status}, message: ${result.message} ${result.data?.completedOrder?.products}',
       name: 'KotSaveOrder',
     );
     log(
