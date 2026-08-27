@@ -1899,6 +1899,7 @@ class HomeController extends GetxController {
           customerName: takeAwayCustomerName.value,
           customerPhone: takeAwayCustomerPhone.value,
           isKot: markAsKitchen,
+          printKitchen: prepareForKitchenPrint,
           products: pendingItems
               .map(
                 (item) => SaveOrderProductRequest(
@@ -2006,6 +2007,7 @@ class HomeController extends GetxController {
     required int? staffId,
     bool selectedOnly = true,
     bool markAsKitchen = true,
+    bool printKitchen = true,
   }) async {
     if (isSavingTakeAwayHold.value) return false;
     if (takeAwayHoldOrderId.value != null) {
@@ -2059,6 +2061,7 @@ class HomeController extends GetxController {
           charge: chargeAmount.value,
           discountType: discountType.value,
           discountValue: discountValue.value,
+          printKitchen: printKitchen,
           products: pendingItems
               .map(
                 (item) => SaveOrderProductRequest(
@@ -2141,6 +2144,7 @@ class HomeController extends GetxController {
       staffId: staffId,
       selectedOnly: false,
       markAsKitchen: false,
+      printKitchen: false,
     );
   }
 

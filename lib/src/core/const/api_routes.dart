@@ -1,8 +1,9 @@
 class ApiRoutes {
   ApiRoutes._();
 
-  static const baseUrl =
-      'http://64.227.170.206/iyangarbakery.com/public/api/';
+  static const baseUrl = "http://64.227.170.206/pickmysnacks_billing/public/api/";
+      // 'http://64.227.170.206/iyangarbakery.com/public/api/';
+  
   static const products = 'get_product';
   static const lowStockProducts = 'lowStockProducts';
   static const outOfStockProducts = 'outOfStockProducts';

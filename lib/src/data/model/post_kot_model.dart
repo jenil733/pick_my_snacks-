@@ -15,6 +15,7 @@ class KotOrderRequest {
     this.customerName,
     this.customerPhone,
     this.isKot = true,
+    this.printKitchen = true,
   });
 
   final int tableId;
@@ -30,6 +31,7 @@ class KotOrderRequest {
   final String? customerName;
   final String? customerPhone;
   final bool isKot;
+  final bool printKitchen;
 
   Map<String, dynamic> toFormFields() {
     final fields = <String, dynamic>{
@@ -38,6 +40,7 @@ class KotOrderRequest {
       'payment_mode': paymentMode,
       'discount_type': discountType,
       'is_kot': isKot ? 1 : 0,
+      'print_kitchen': printKitchen ? 1 : 0,
     };
     if (discountType != 'none') {
       fields['discount_value'] = discountValue;

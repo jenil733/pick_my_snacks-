@@ -12,6 +12,7 @@ class TakeAwayHoldRequest {
     this.status = '',
     this.discountType = 'none',
     this.discountValue = 0,
+    this.printKitchen = true,
   });
 
   final int staffId;
@@ -24,6 +25,7 @@ class TakeAwayHoldRequest {
   final List<SaveOrderProductRequest> products;
   final String discountType;
   final double discountValue;
+  final bool printKitchen;
 
   Map<String, dynamic> toFormFields() {
     final hasDiscount =
@@ -38,6 +40,7 @@ class TakeAwayHoldRequest {
       'status': status.trim(),
       'discount_type': hasDiscount ? discountType : '',
       'discount_value': hasDiscount ? discountValue : '',
+      'print_kitchen': printKitchen ? 1 : 0,
     };
 
     for (var index = 0; index < products.length; index++) {
