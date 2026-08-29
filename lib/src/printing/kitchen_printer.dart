@@ -122,7 +122,8 @@ class KitchenPrinter {
         'Printer configured successfully',
         styles: const PosStyles(align: PosAlign.center),
       ),
-      ...generator.feed(3),
+      ...generator.feed(5),
+      ...generator.cut(),
     ];
   }
 

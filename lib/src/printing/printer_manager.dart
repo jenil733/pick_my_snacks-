@@ -190,7 +190,6 @@ class PrinterManager {
     });
   }
 
-
   void _logReceipt(String title, ReceiptPrintJob job) {
     final b = StringBuffer();
     b.writeln('========================================');
@@ -276,7 +275,6 @@ class PrinterManager {
     b.writeln('========================================');
     log(b.toString());
   }
-
 
   Future<void> _withPrinter(
     PrinterRole role,

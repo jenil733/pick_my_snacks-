@@ -1,0 +1,1 @@
+-keep class app.web.groons.print_bluetooth_thermal.** { *; }
