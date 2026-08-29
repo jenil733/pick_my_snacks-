@@ -171,7 +171,12 @@ class BillSummaryPanel extends StatelessWidget {
                   initialTab: TakeAwayOrdersTab.pending,
                 ),
                 icon: const Icon(Icons.pending_actions_rounded),
-                label: const Text('Pending'),
+                label: Text(
+                  'Pending',
+                  style: TextHelper.poppins.copyWith(
+                    color: AppColors.primaryDark,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -183,7 +188,12 @@ class BillSummaryPanel extends StatelessWidget {
                   initialTab: TakeAwayOrdersTab.completed,
                 ),
                 icon: const Icon(Icons.task_alt_rounded),
-                label: const Text('Completed'),
+                label: Text(
+                  'Completed',
+                  style: TextHelper.poppins.copyWith(
+                    color: AppColors.primaryDark,
+                  ),
+                ),
               ),
             ),
           ],
@@ -273,19 +283,25 @@ class BillSummaryPanel extends StatelessWidget {
           child: OutlinedButton.icon(
             onPressed:
                 controller.cart.isEmpty ||
+                    controller.isHoldingKotTable.value ||
                     controller.isSavingKotOrder.value ||
                     controller.isCompletingKotOrder.value
                 ? null
                 : () => holdKotTable(context, controller),
             icon: const Icon(Icons.table_restaurant_outlined, size: 19),
             label: Text(
-              controller.isSavingKotOrder.value ? 'Holding...' : 'Hold Table',
+              controller.isHoldingKotTable.value ? 'Holding...' : 'Hold Table',
+              style: TextHelper.poppins.copyWith(
+                color: AppColors.yellowDark,
+                fontSize: 14,
+              ),
             ),
             style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(50),
+              side: const BorderSide(color: AppColors.yellowDark),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(8),
               ),
+              minimumSize: const Size.fromHeight(50),
             ),
           ),
         ),
@@ -836,6 +852,7 @@ Future<bool> sendKotBill(
     );
     return false;
   }
+  AppToast.show(context, 'Bill is printed on kitchen');
   final printableItems = controller.lastKitchenOrderItems
       .map((item) => item.copy())
       .toList(growable: false);
@@ -909,6 +926,7 @@ Future<bool> sendTakeAwayKotBill(
     );
     return false;
   }
+  AppToast.show(context, 'Bill is printed on kitchen');
   final printed = await _printKitchenTicket(
     context,
     items: controller.lastKitchenOrderItems
@@ -956,7 +974,7 @@ Future<bool> _printKitchenTicket(
       ),
     );
     if (!context.mounted) return true;
-    AppToast.show(context, 'Kitchen Bill printed.');
+
     return true;
   } on PrinterManagerException catch (error) {
     if (!context.mounted) return false;

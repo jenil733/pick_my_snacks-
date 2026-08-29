@@ -350,6 +350,7 @@ class HomeController extends GetxController {
   RxString get paymentMethod => _cartController.paymentMethod;
   final isSavingOrder = false.obs;
   final isSavingKotOrder = false.obs;
+  final isHoldingKotTable = false.obs;
   RxBool get isSyncingTotals => _cartController.isSyncingTotals;
   final saveOrderError = RxnString();
   final kotOrderError = RxnString();
@@ -2149,39 +2150,44 @@ class HomeController extends GetxController {
   }
 
   Future<bool> holdActiveKotTable({required int? staffId}) async {
-    final tableId = activeTableNumber.value;
-    if (tableId == null) {
-      kotOrderError.value = 'Please select a table.';
-      return false;
-    }
-    if (cart.isEmpty) {
-      kotOrderError.value = 'Add at least one product to the bill.';
-      return false;
-    }
+    isHoldingKotTable.value = true;
+    try {
+      final tableId = activeTableNumber.value;
+      if (tableId == null) {
+        kotOrderError.value = 'Please select a table.';
+        return false;
+      }
+      if (cart.isEmpty) {
+        kotOrderError.value = 'Add at least one product to the bill.';
+        return false;
+      }
 
-    if (pendingKitchenItems.isNotEmpty) {
-      final saved = await saveKitchenOrder(
-        staffId: staffId,
-        prepareForKitchenPrint: false,
+      if (pendingKitchenItems.isNotEmpty) {
+        final saved = await saveKitchenOrder(
+          staffId: staffId,
+          prepareForKitchenPrint: false,
+        );
+        if (!saved) return false;
+      } else if (!submittedKitchenTables.contains(tableId)) {
+        kotOrderError.value = 'Unable to hold the table before saving its order.';
+        return false;
+      }
+
+      lastKitchenOrderItems.clear();
+      kitchenOrderAwaitingPrint.value = false;
+      kitchenOrderAwaitingPrintTable.value = null;
+      final currentStatus = tableStatuses[tableId];
+      tableStatuses[tableId] = TableStatusData(
+        id: currentStatus?.id,
+        tableId: tableId,
+        tableStatus: 'Occupied',
+        isOccupied: 1,
       );
-      if (!saved) return false;
-    } else if (!submittedKitchenTables.contains(tableId)) {
-      kotOrderError.value = 'Unable to hold the table before saving its order.';
-      return false;
+      showKotTables();
+      return true;
+    } finally {
+      isHoldingKotTable.value = false;
     }
-
-    lastKitchenOrderItems.clear();
-    kitchenOrderAwaitingPrint.value = false;
-    kitchenOrderAwaitingPrintTable.value = null;
-    final currentStatus = tableStatuses[tableId];
-    tableStatuses[tableId] = TableStatusData(
-      id: currentStatus?.id,
-      tableId: tableId,
-      tableStatus: 'Occupied',
-      isOccupied: 1,
-    );
-    showKotTables();
-    return true;
   }
 
   List<CartItem> get pendingKitchenItems {

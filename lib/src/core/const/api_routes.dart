@@ -1,9 +1,8 @@
 class ApiRoutes {
   ApiRoutes._();
 
-  static const baseUrl = "http://64.227.170.206/pickmysnacks_billing/public/api/";
-      // 'http://64.227.170.206/iyangarbakery.com/public/api/';
-  
+  static const baseUrl = 'http://64.227.170.206/iyangarbakery.com/public/api/';
+
   static const products = 'get_product';
   static const lowStockProducts = 'lowStockProducts';
   static const outOfStockProducts = 'outOfStockProducts';
@@ -33,7 +32,7 @@ class ApiRoutes {
   static String deleteHoldBill(int orderId) => 'delete_hold_bill/$orderId';
 
   static const apiKey = String.fromEnvironment(
-    'API_KEY',    
+    'API_KEY',
     defaultValue: 'dvvervdgdgdfgmtbjL7554434pvxmjts6MFL3F9FIuAPjmFI0g=',
   );
 }

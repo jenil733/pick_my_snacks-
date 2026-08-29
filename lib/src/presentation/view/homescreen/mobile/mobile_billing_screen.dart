@@ -319,8 +319,24 @@ class MobileBillingScreen extends StatelessWidget {
                   controller,
                   initialTab: TakeAwayOrdersTab.pending,
                 ),
-                icon: const Icon(Icons.pending_actions_rounded),
-                label: const Text('Pending'),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.primaryDark),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  minimumSize: const Size.fromHeight(50),
+                ),
+                icon: const Icon(
+                  Icons.pending_actions_rounded,
+                  color: AppColors.primaryDark,
+                ),
+                label: Text(
+                  'Pending',
+                  style: TextHelper.poppins.copyWith(
+                    color: AppColors.primaryDark,
+                    fontSize: 14,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 10),
@@ -331,8 +347,24 @@ class MobileBillingScreen extends StatelessWidget {
                   controller,
                   initialTab: TakeAwayOrdersTab.completed,
                 ),
-                icon: const Icon(Icons.task_alt_rounded),
-                label: const Text('Completed'),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.primaryDark),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  minimumSize: const Size.fromHeight(50),
+                ),
+                icon: const Icon(
+                  Icons.task_alt_rounded,
+                  color: AppColors.primaryDark,
+                ),
+                label: Text(
+                  'Completed',
+                  style: TextHelper.poppins.copyWith(
+                    color: AppColors.primaryDark,
+                    fontSize: 14,
+                  ),
+                ),
               ),
             ),
           ],
@@ -349,7 +381,7 @@ class MobileBillingScreen extends StatelessWidget {
                         (controller.takeAwayHoldOrderId.value != null &&
                             controller.lastKitchenOrderItems.isEmpty &&
                             !controller.hasTakeAwayPendingKitchenItems)
-                        ? null
+                    ? null
                     : () => sendTakeAwayKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: Text(
@@ -422,19 +454,29 @@ class MobileBillingScreen extends StatelessWidget {
           child: OutlinedButton.icon(
             onPressed:
                 controller.cart.isEmpty ||
+                    controller.isHoldingKotTable.value ||
                     controller.isSavingKotOrder.value ||
                     controller.isCompletingKotOrder.value
                 ? null
                 : () => holdKotTable(context, controller),
-            icon: const Icon(Icons.table_restaurant_outlined, size: 19),
+            icon: const Icon(
+              Icons.table_restaurant_outlined,
+              size: 19, 
+              color: AppColors.yellowDark,
+            ),
             label: Text(
-              controller.isSavingKotOrder.value ? 'Holding...' : 'Hold Table',
+              controller.isHoldingKotTable.value ? 'Holding...' : 'Hold Table',
+              style: TextHelper.poppins.copyWith(
+                color: AppColors.yellowDark,
+                fontSize: 14,
+              ),
             ),
             style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
+              side: const BorderSide(color: AppColors.yellowDark),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
+              minimumSize: const Size.fromHeight(50),
             ),
           ),
         ),
