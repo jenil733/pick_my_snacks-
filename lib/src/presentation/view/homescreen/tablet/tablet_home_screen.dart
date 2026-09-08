@@ -6,6 +6,7 @@ import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_contr
 import 'package:pick_my_snacks/src/presentation/view/homescreen/kot_tables_view.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_summary_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/cart_panel.dart';
+import 'package:pick_my_snacks/src/presentation/widgets/homescreen/category_billing_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/external_qr_scanner_button.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/held_bills_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/notification_button.dart';
@@ -43,7 +44,8 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
   }
 
   void _printReceipt() {
-    if (widget.controller.flow.value != PosFlow.billing ||
+    final flow = widget.controller.flow.value;
+    if ((flow != PosFlow.billing && flow != PosFlow.categoryBilling) ||
         widget.controller.cart.isEmpty ||
         widget.controller.isSavingOrder.value) {
       return;
@@ -103,6 +105,9 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
                             : 'Table ${widget.controller.activeTableNumber.value}'
                       : widget.controller.flow.value == PosFlow.takeAway
                       ? 'Take Away'
+                      : widget.controller.flow.value ==
+                              PosFlow.categoryBilling
+                      ? 'Category Billing'
                       : 'Tablet billing',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
@@ -144,82 +149,164 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
             body: SafeArea(
               top: false,
               child: Obx(
-                () =>
-                    widget.controller.flow.value == PosFlow.kot &&
-                        widget.controller.kotStage.value != KotStage.order
-                    ? KotTablesView(
-                        controller: widget.controller,
-                        onOpenOrder: () => setState(() => _selectedDetail = 0),
-                      )
-                    : Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 9,
-                              child: ProductsPanel(
-                                controller: widget.controller,
-                                searchFocusNode: _searchFocusNode,
-                              ),
+                () {
+                  if (widget.controller.flow.value == PosFlow.kot &&
+                      widget.controller.kotStage.value != KotStage.order) {
+                    return KotTablesView(
+                      controller: widget.controller,
+                      onOpenOrder: () => setState(() => _selectedDetail = 0),
+                    );
+                  }
+
+                  if (widget.controller.flow.value == PosFlow.categoryBilling) {
+                    return Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 6,
+                            child: CategoryListPanel(
+                              controller: widget.controller,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              flex: 11,
-                              child: Column(
-                                children: [
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: SegmentedButton<int>(
-                                      segments: [
-                                        ButtonSegment(
-                                          value: 0,
-                                          icon: const Icon(
-                                            Icons.shopping_cart_outlined,
-                                          ),
-                                          label: Obx(
-                                            () => Text(
-                                              'Cart (${widget.controller.itemCount})',
-                                            ),
-                                          ),
-                                        ),
-                                        const ButtonSegment(
-                                          value: 1,
-                                          icon: Icon(
-                                            Icons.receipt_long_outlined,
-                                          ),
-                                          label: Text('Billing'),
-                                        ),
-                                      ],
-                                      selected: {_selectedDetail},
-                                      showSelectedIcon: false,
-                                      onSelectionChanged: (selection) {
-                                        setState(
-                                          () =>
-                                              _selectedDetail = selection.first,
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Expanded(
-                                    child: IndexedStack(
-                                      index: _selectedDetail,
-                                      children: [
-                                        CartPanel(
-                                          controller: widget.controller,
-                                        ),
-                                        BillSummaryPanel(
-                                          controller: widget.controller,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 8,
+                            child: CategoryProductsPanel(
+                              controller: widget.controller,
+                              searchFocusNode: _searchFocusNode,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 9,
+                            child: Column(
+                              children: [
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: SegmentedButton<int>(
+                                    segments: [
+                                      ButtonSegment(
+                                        value: 0,
+                                        icon: const Icon(
+                                          Icons.shopping_cart_outlined,
+                                        ),
+                                        label: Obx(
+                                          () => Text(
+                                            'Cart (${widget.controller.itemCount})',
+                                          ),
+                                        ),
+                                      ),
+                                      const ButtonSegment(
+                                        value: 1,
+                                        icon: Icon(
+                                          Icons.receipt_long_outlined,
+                                        ),
+                                        label: Text('Billing'),
+                                      ),
+                                    ],
+                                    selected: {_selectedDetail},
+                                    showSelectedIcon: false,
+                                    onSelectionChanged: (selection) {
+                                      setState(
+                                        () =>
+                                            _selectedDetail = selection.first,
+                                      );
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Expanded(
+                                  child: IndexedStack(
+                                    index: _selectedDetail,
+                                    children: [
+                                      CartPanel(
+                                        controller: widget.controller,
+                                      ),
+                                      BillSummaryPanel(
+                                        controller: widget.controller,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
+                    );
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 9,
+                          child: ProductsPanel(
+                            controller: widget.controller,
+                            searchFocusNode: _searchFocusNode,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 11,
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                width: double.infinity,
+                                child: SegmentedButton<int>(
+                                  segments: [
+                                    ButtonSegment(
+                                      value: 0,
+                                      icon: const Icon(
+                                        Icons.shopping_cart_outlined,
+                                      ),
+                                      label: Obx(
+                                        () => Text(
+                                          'Cart (${widget.controller.itemCount})',
+                                        ),
+                                      ),
+                                    ),
+                                    const ButtonSegment(
+                                      value: 1,
+                                      icon: Icon(
+                                        Icons.receipt_long_outlined,
+                                      ),
+                                      label: Text('Billing'),
+                                    ),
+                                  ],
+                                  selected: {_selectedDetail},
+                                  showSelectedIcon: false,
+                                  onSelectionChanged: (selection) {
+                                    setState(
+                                      () =>
+                                          _selectedDetail = selection.first,
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Expanded(
+                                child: IndexedStack(
+                                  index: _selectedDetail,
+                                  children: [
+                                    CartPanel(
+                                      controller: widget.controller,
+                                    ),
+                                    BillSummaryPanel(
+                                      controller: widget.controller,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ),

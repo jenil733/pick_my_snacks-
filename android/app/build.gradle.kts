@@ -7,6 +7,7 @@ if (keystorePropertiesFile.exists()) {
 }
 plugins {
     id("com.android.application")
+    id("kotlin-android")
     // START: FlutterFire Configuration
     id("com.google.gms.google-services")
     // END: FlutterFire Configuration

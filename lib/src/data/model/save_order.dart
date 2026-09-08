@@ -1,4 +1,4 @@
-class SaveOrderRequest {
+﻿class SaveOrderRequest {
   const SaveOrderRequest({
     required this.staffId,
     required this.paymentMode,
@@ -46,6 +46,9 @@ class SaveOrderRequest {
     for (var index = 0; index < products.length; index++) {
       final product = products[index];
       fields['products[$index][product_id]'] = product.productId;
+      if (product.variantId != null && product.variantId! > 0) {
+        fields['products[$index][variant_id]'] = product.variantId;
+      }
       fields['products[$index][qty]'] = product.apiQuantity;
       if (product.unitValue != null) {
         fields['products[$index][unit_value]'] = product.unitValue;
@@ -66,10 +69,12 @@ class SaveOrderProductRequest {
     this.unitValue,
     this.unit = '',
     this.note = '',
+    this.variantId,
     this.isKot,
   });
 
   final int productId;
+  final int? variantId;
   final num quantity;
   final num? unitValue;
   final String unit;
@@ -342,3 +347,4 @@ double? _toDouble(Object? value) {
   if (value is num) return value.toDouble();
   return double.tryParse(value?.toString() ?? '');
 }
+

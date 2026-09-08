@@ -7,6 +7,7 @@ import 'package:pick_my_snacks/src/presentation/view/homescreen/kot_tables_view.
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_summary_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/cart_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/external_qr_scanner_button.dart';
+import 'package:pick_my_snacks/src/presentation/widgets/homescreen/category_billing_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/held_bills_panel.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/notification_button.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/products_panel.dart';
@@ -63,32 +64,62 @@ class _DesktopHomeScreen extends StatelessWidget {
               _TopBar(controller: controller),
               Expanded(
                 child: Obx(
-                  () =>
-                      controller.flow.value == PosFlow.kot &&
-                          controller.kotStage.value != KotStage.order
-                      ? KotTablesView(controller: controller)
-                      : Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                flex: 29,
-                                child: ProductsPanel(controller: controller),
+                  () {
+                    if (controller.flow.value == PosFlow.kot &&
+                        controller.kotStage.value != KotStage.order) {
+                      return KotTablesView(controller: controller);
+                    }
+
+                    if (controller.flow.value == PosFlow.categoryBilling) {
+                      return Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              flex: 20,
+                              child: CategoryListPanel(controller: controller),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 44,
+                              child: CategoryProductsPanel(
+                                controller: controller,
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                flex: 39,
-                                child: CartPanel(controller: controller),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                flex: 32,
-                                child: BillSummaryPanel(controller: controller),
-                              ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 36,
+                              child: BillSummaryPanel(controller: controller),
+                            ),
+                          ],
                         ),
+                      );
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            flex: 29,
+                            child: ProductsPanel(controller: controller),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 39,
+                            child: CartPanel(controller: controller),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 32,
+                            child: BillSummaryPanel(controller: controller),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -143,6 +174,8 @@ class _TopBar extends StatelessWidget {
                         : 'Table ${controller.activeTableNumber.value}'
                   : controller.flow.value == PosFlow.takeAway
                   ? 'Take Away'
+                  : controller.flow.value == PosFlow.categoryBilling
+                  ? 'Category Billing'
                   : 'Billing',
               style: TextHelper.whiteButton.copyWith(fontSize: 18),
             ),

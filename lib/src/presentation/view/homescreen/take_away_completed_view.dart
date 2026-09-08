@@ -138,7 +138,7 @@ class _CompletedOrderBody extends StatelessWidget {
                   product.productName ?? 'Product ${product.productId ?? '-'}',
                 ),
                 subtitle: Text(
-                  product?.unit == 'kg'
+                  product.unit == 'kg'
                       ? '${product.quantity ?? '-'} ${product.unit ?? ''}'
                             .trim()
                       : '${num.parse(product.quantity ?? '0.00').toInt()} ${product.unit ?? ''}'

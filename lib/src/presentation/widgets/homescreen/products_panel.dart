@@ -97,20 +97,7 @@ class ProductsPanel extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ProductThumbnail(
-                            path: product.image,
-                            size: 48,
-                            padding: 0,
-                          ),
-                        ),
+                        ProductThumbnail(path: product.image, size: 52),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(

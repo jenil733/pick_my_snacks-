@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:pick_my_snacks/src/core/const/appcolors.dart';
 import 'package:pick_my_snacks/src/core/const/appimages.dart';
@@ -165,13 +165,15 @@ class ProductThumbnail extends StatelessWidget {
   const ProductThumbnail({
     required this.path,
     this.size = 48,
-    this.padding = 5,
+    this.padding = 0,
+    this.borderRadius = 8,
     super.key,
   });
 
   final String path;
   final double size;
   final double padding;
+  final double borderRadius;
 
   @override
   Widget build(BuildContext context) {
@@ -179,38 +181,98 @@ class ProductThumbnail extends StatelessWidget {
       width: size,
       height: size,
       padding: EdgeInsets.all(padding),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.background,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(
+          color: AppColors.border.withValues(alpha: 0.6),
+          width: 0.8,
+        ),
       ),
-      child: _buildImage(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(
+          borderRadius > padding ? borderRadius - padding : 0,
+        ),
+        child: _buildImage(),
+      ),
     );
   }
 
   Widget _buildImage() {
-    final isNetwork = path.startsWith('http://') || path.startsWith('https://');
-    if (!isNetwork) {
-      return SvgPicture.asset(
-        path,
-        fit: BoxFit.contain,
+    final cleanPath = path.trim();
+    if (cleanPath.isEmpty) {
+      return const _DefaultProductIcon();
+    }
+
+    final isHttp =
+        cleanPath.startsWith('http://') || cleanPath.startsWith('https://');
+    final isAsset = cleanPath.startsWith('assets/');
+
+    if (isAsset) {
+      if (cleanPath.toLowerCase().endsWith('.svg')) {
+        return SvgPicture.asset(
+          cleanPath,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => const _DefaultProductIcon(),
+        );
+      }
+      return Image.asset(
+        cleanPath,
+        fit: BoxFit.cover,
         errorBuilder: (_, _, _) => const _DefaultProductIcon(),
       );
     }
 
-    if (Uri.tryParse(path)?.path.toLowerCase().endsWith('.svg') == true) {
+    var pathStr = cleanPath;
+    if (pathStr.startsWith('/')) pathStr = pathStr.substring(1);
+    if (pathStr.startsWith('storage/')) pathStr = pathStr.substring('storage/'.length);
+    if (pathStr.startsWith('public/')) pathStr = pathStr.substring('public/'.length);
+
+    final fullUrl = isHttp
+        ? cleanPath
+        : pathStr;
+
+    if (Uri.tryParse(fullUrl)?.path.toLowerCase().endsWith('.svg') == true) {
       return SvgPicture.network(
-        path,
+        fullUrl,
         fit: BoxFit.contain,
-        placeholderBuilder: (_) =>
-            const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        placeholderBuilder: (_) => const Center(
+          child: SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: AppColors.yellowDark,
+            ),
+          ),
+        ),
         errorBuilder: (_, _, _) => const _DefaultProductIcon(),
       );
     }
 
     return Image.network(
-      path,
-      fit: BoxFit.contain,
-      errorBuilder: (_, _, _) => const _DefaultProductIcon(),
+      fullUrl,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Center(
+          child: SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              value: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded /
+                      (loadingProgress.expectedTotalBytes ?? 1)
+                  : null,
+              color: AppColors.yellowDark,
+            ),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) =>
+          const _DefaultProductIcon(),
     );
   }
 }
@@ -224,7 +286,7 @@ class _DefaultProductIcon extends StatelessWidget {
       child: Icon(
         Icons.inventory_2_outlined,
         color: AppColors.textSecondary,
-        size: 28,
+        size: 24,
       ),
     );
   }
@@ -518,3 +580,4 @@ Future<void> deleteKotTableOrder(
   }
   AppToast.show(context, 'Table $tableId is now free.');
 }
+
