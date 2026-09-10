@@ -148,13 +148,14 @@ class CategoryListPanel extends StatelessWidget {
                 separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final cat = categories[index];
+
                   final isSelected =
                       selectedCat != null &&
                       selectedCat.toLowerCase() == cat.toLowerCase();
 
                   return _CategoryTileItem(
                     icon: iconForCategory(cat),
-                    title: cat,
+                    title: "$cat",
                     isSelected: isSelected,
                     onTap: () => controller.selectCategory(cat),
                   );
@@ -395,98 +396,73 @@ class CategoryProductsPanel extends StatelessWidget {
                 );
               }
 
-              return ListView.separated(
+              return GridView.builder(
                 padding: const EdgeInsets.all(12),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 180,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  mainAxisExtent: 220,
+                ),
                 itemCount: products.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (_, index) {
                   final product = products[index];
                   return Container(
-                    padding: const EdgeInsets.all(9),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       border: Border.all(color: AppColors.border),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ProductThumbnail(path: product.image, size: 52),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${product.name} ${product.unit}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextHelper.bodySemiBold,
-                              ),
-                              if (product.productId.trim().isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Code: ${product.productId.trim()}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextHelper.poppins,
-                                ),
-                              ],
-                              const SizedBox(height: 3),
-                              Row(
-                                children: [
-                                  Text(
-                                    money(product.price),
-                                    style: TextHelper.body,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.yellowLight,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      product.category,
-                                      style: const TextStyle(
-                                        color: AppColors.yellowDark,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                        Center(
+                          child: ProductThumbnail(
+                            path: product.image,
+                            size: 70,
                           ),
                         ),
-                        Obx(() {
-                          final hasCartItems = controller.cart.isNotEmpty;
-                          final isAdded =
-                              hasCartItems &&
-                              controller.cart.any(
+                        const SizedBox(height: 8),
+                        Text(
+                          '${product.name} ${product.unit}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextHelper.bodySemiBold,
+                        ),
+                        if (product.productId.trim().isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Code: ${product.productId.trim()}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextHelper.poppins,
+                          ),
+                        ],
+                        const Spacer(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                money(product.price),
+                                style: TextHelper.body,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Obx(() {
+                              final cartItems = controller.cart.where(
                                 (item) =>
                                     item.product.id == product.id &&
                                     item.product.unit == product.unit &&
                                     item.product.variantId == product.variantId,
                               );
-                          return isAdded
-                              ? Tooltip(
-                                  message: 'Add another ${product.name}',
-                                  child: InkWell(
-                                    key: ValueKey(
-                                      'cat-product-add-another-${product.id}',
-                                    ),
-                                    onTap: controller.isTakeAwayCartLocked
-                                        ? null
-                                        : () => controller.addProduct(product),
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 9,
-                                        vertical: 7,
-                                      ),
+                              final cartItem = cartItems.isNotEmpty
+                                  ? cartItems.first
+                                  : null;
+                              final isAdded = cartItem != null;
+
+                              return isAdded
+                                  ? Container(
                                       decoration: BoxDecoration(
                                         color: AppColors.yellowLight,
                                         borderRadius: BorderRadius.circular(8),
@@ -494,39 +470,89 @@ class CategoryProductsPanel extends StatelessWidget {
                                           color: AppColors.yellow,
                                         ),
                                       ),
-                                      child: const Row(
+                                      child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(
-                                            Icons.add_rounded,
-                                            color: AppColors.yellowDark,
-                                            size: 16,
+                                          InkWell(
+                                            borderRadius:
+                                                const BorderRadius.horizontal(
+                                                  left: Radius.circular(8),
+                                                ),
+                                            onTap:
+                                                controller.isTakeAwayCartLocked
+                                                ? null
+                                                : () => controller.decrement(
+                                                    cartItem,
+                                                  ),
+                                            child: const Padding(
+                                              padding: EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 6,
+                                              ),
+                                              child: Icon(
+                                                Icons.remove_rounded,
+                                                color: AppColors.yellowDark,
+                                                size: 16,
+                                              ),
+                                            ),
                                           ),
-                                          SizedBox(width: 2),
-                                          Text(
-                                            '+1',
-                                            style: TextStyle(
-                                              color: AppColors.yellowDark,
-                                              fontFamily: 'Poppins',
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 2,
+                                            ),
+                                            constraints: const BoxConstraints(
+                                              minWidth: 16,
+                                            ),
+                                            child: Text(
+                                              '${cartItem.quantity}',
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: AppColors.yellowDark,
+                                                fontFamily: 'Poppins',
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                          InkWell(
+                                            borderRadius:
+                                                const BorderRadius.horizontal(
+                                                  right: Radius.circular(8),
+                                                ),
+                                            onTap:
+                                                controller.isTakeAwayCartLocked
+                                                ? null
+                                                : () => controller.addProduct(
+                                                    product,
+                                                  ),
+                                            child: const Padding(
+                                              padding: EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 6,
+                                              ),
+                                              child: Icon(
+                                                Icons.add_rounded,
+                                                color: AppColors.yellowDark,
+                                                size: 16,
+                                              ),
                                             ),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                  ),
-                                )
-                              : SoftIconButton(
-                                  key: ValueKey(
-                                    'cat-product-add-${product.id}',
-                                  ),
-                                  icon: Icons.add,
-                                  onTap: controller.isTakeAwayCartLocked
-                                      ? null
-                                      : () => controller.addProduct(product),
-                                );
-                        }),
+                                    )
+                                  : SoftIconButton(
+                                      key: ValueKey(
+                                        'cat-product-add-${product.id}',
+                                      ),
+                                      icon: Icons.add,
+                                      onTap: controller.isTakeAwayCartLocked
+                                          ? null
+                                          : () =>
+                                                controller.addProduct(product),
+                                    );
+                            }),
+                          ],
+                        ),
                       ],
                     ),
                   );

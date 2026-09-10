@@ -1502,6 +1502,13 @@ class HomeController extends GetxController {
         return;
       }
       billingCategories.assignAll(response.data);
+      billingCategories.sort(
+        (a, b) => (a.id == 36 || a.id == 21)
+            ? -1
+            : (b.id == 36 || b.id == 21)
+            ? 1
+            : 0,
+      );
       if (flow.value == PosFlow.categoryBilling &&
           !categories.contains(selectedCategory.value)) {
         clearSelectedCategory();
