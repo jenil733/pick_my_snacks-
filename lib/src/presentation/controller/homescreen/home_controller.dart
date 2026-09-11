@@ -1,3 +1,6 @@
+import 'package:pick_my_snacks/src/domain/usecase/get_category_products_usecase.dart';
+import 'package:pick_my_snacks/src/data/model/get_category.dart';
+import 'package:pick_my_snacks/src/domain/usecase/get_categories_usecase.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:developer';
@@ -16,7 +19,6 @@ import 'package:pick_my_snacks/src/data/model/processing.dart';
 import 'package:pick_my_snacks/src/data/model/post_kot_model.dart';
 import 'package:pick_my_snacks/src/data/model/remove_kot_product.dart';
 import 'package:pick_my_snacks/src/data/model/hold_order.dart';
-import 'package:pick_my_snacks/src/data/model/remove_kot_quantity.dart';
 
 import 'package:pick_my_snacks/src/data/model/save_order.dart';
 import 'package:pick_my_snacks/src/data/model/take_away_hold.dart';
@@ -55,6 +57,11 @@ class Product {
     required this.image,
     this.productId = '',
     this.stock,
+    this.category = 'General',
+    this.taxRate = 0,
+    this.taxMode = 'none',
+    this.variantId,
+    this.categoryId,
   });
 
   final int id;
@@ -64,6 +71,11 @@ class Product {
   final String image;
   final String productId;
   final num? stock;
+  final String category;
+  final double taxRate;
+  final String taxMode;
+  final int? variantId;
+  final int? categoryId;
 }
 
 class CartItem {
@@ -128,6 +140,17 @@ class CartItem {
     final unitAmount = weight == null ? product.price : product.price * weight;
     return unitAmount * quantity;
   }
+
+  double get gstAmount {
+    final rate = product.taxRate;
+    if (rate <= 0 || product.taxMode == 'none') return 0;
+    if (product.taxMode == 'include') return total * rate / (100 + rate);
+    if (product.taxMode == 'exclude') return total * rate / 100;
+    return 0;
+  }
+
+  double get subtotalBeforeGst =>
+      product.taxMode == 'include' ? total - gstAmount : total;
 
   num get orderQuantity {
     final weight = effectiveWeightKg;
@@ -237,7 +260,7 @@ class HeldBill {
           .toDouble();
 }
 
-enum PosFlow { billing, kot, takeAway }
+enum PosFlow { billing, categoryBilling, kot, takeAway }
 
 enum KotStage { tables, details, order }
 
@@ -303,7 +326,38 @@ class HomeController extends GetxController {
     this._getLowStockProductsUseCase,
     this._getOutOfStockProductsUseCase,
     this._getNotificationCountUseCase,
+    this._getCategoriesUseCase,
+    this._getCategoryProductsUseCase,
   ]);
+
+  final GetCategoryProductsUseCase? _getCategoryProductsUseCase;
+  final selectedCategoryId = RxnInt();
+  final categoryProducts = <Product>[].obs;
+  final isLoadingCategoryProducts = false.obs;
+  final categoryProductsError = RxnString();
+  final categoryProductCounts = <int, int>{}.obs;
+  int _categoryProductsRequest = 0;
+
+  bool get isLoadingDisplayedProducts =>
+      flow.value == PosFlow.categoryBilling &&
+          _getCategoryProductsUseCase != null
+      ? isLoadingCategoryProducts.value
+      : isLoadingProducts.value;
+  String? get displayedProductsError =>
+      flow.value == PosFlow.categoryBilling &&
+          _getCategoryProductsUseCase != null
+      ? categoryProductsError.value
+      : productError.value;
+  Future<void> retryDisplayedProducts() =>
+      flow.value == PosFlow.categoryBilling &&
+          _getCategoryProductsUseCase != null
+      ? getCategoryProducts()
+      : getProducts();
+
+  final GetCategoriesUseCase? _getCategoriesUseCase;
+  final billingCategories = <BillingCategory>[].obs;
+  final isLoadingCategories = false.obs;
+  final categoryError = RxnString();
 
   final GetProductsUseCase? _getProductsUseCase;
   final SaveOrderUseCase? _saveOrderUseCase;
@@ -518,11 +572,14 @@ class HomeController extends GetxController {
       showKotTables();
     }
     flow.value = value;
+    if (value == PosFlow.categoryBilling) unawaited(getCategories());
     if (value == PosFlow.takeAway) {
       // Take Away is intentionally a demo checkout. Keep product loading live,
       // but discard server-calculated billing values and never sync an order.
       _resetBackendTotals();
-    } else if (value == PosFlow.billing) {
+    } else if (value == PosFlow.billing || value == PosFlow.categoryBilling) {
+      clearSelectedCategory();
+      categorySearchQuery.value = '';
       refreshOrderTotals();
     }
   }
@@ -1062,6 +1119,7 @@ class HomeController extends GetxController {
       price: 20,
       image: AppImages.water,
       stock: 4,
+      category: 'Beverages',
     ),
     Product(
       id: 2,
@@ -1070,6 +1128,7 @@ class HomeController extends GetxController {
       price: 40,
       image: AppImages.cola,
       stock: 0,
+      category: 'Beverages',
     ),
     Product(
       id: 3,
@@ -1078,6 +1137,7 @@ class HomeController extends GetxController {
       price: 20,
       image: AppImages.chips,
       stock: 3,
+      category: 'Snacks',
     ),
     Product(
       id: 4,
@@ -1086,6 +1146,7 @@ class HomeController extends GetxController {
       price: 10,
       image: AppImages.biscuit,
       stock: 12,
+      category: 'Bakery & Biscuits',
     ),
     Product(
       id: 5,
@@ -1094,6 +1155,7 @@ class HomeController extends GetxController {
       price: 30,
       image: AppImages.chocolate,
       stock: 2,
+      category: 'Sweets & Chocolates',
     ),
     Product(
       id: 6,
@@ -1102,6 +1164,7 @@ class HomeController extends GetxController {
       price: 145,
       image: AppImages.detergent,
       stock: 8,
+      category: 'Groceries',
     ),
     Product(
       id: 7,
@@ -1110,6 +1173,7 @@ class HomeController extends GetxController {
       price: 45,
       image: AppImages.toothpaste,
       stock: 0,
+      category: 'Personal Care',
     ),
   ];
 
@@ -1279,6 +1343,10 @@ class HomeController extends GetxController {
         : unitValue.toString();
     final unit = '$formattedUnitValue${item.unit ?? ''}'.trim();
     final apiImage = item.image?.trim();
+    final rawCategory = item.categoryName?.trim();
+    final category = rawCategory != null && rawCategory.isNotEmpty
+        ? rawCategory
+        : _inferCategory(item.productName ?? '', item.unit ?? '');
 
     return Product(
       id: item.id ?? index + 1,
@@ -1289,6 +1357,10 @@ class HomeController extends GetxController {
       unit: unit,
       price: item.price?.toDouble() ?? 0,
       stock: item.stock,
+      category: category,
+      categoryId: item.categoryId,
+      taxRate: item.tax?.toDouble() ?? 0,
+      taxMode: item.taxMode?.trim().toLowerCase() ?? 'none',
       image:
           apiImage != null &&
               (apiImage.startsWith('http://') ||
@@ -1296,6 +1368,226 @@ class HomeController extends GetxController {
           ? apiImage
           : AppImages.defaultProduct,
     );
+  }
+
+  static String _inferCategory(String name, String unit) {
+    final lowerName = name.toLowerCase();
+    final lowerUnit = unit.toLowerCase();
+    if (lowerUnit.contains('ltr') ||
+        lowerUnit.contains('ml') ||
+        lowerName.contains('juice') ||
+        lowerName.contains('water') ||
+        lowerName.contains('cola') ||
+        lowerName.contains('tea') ||
+        lowerName.contains('coffee') ||
+        lowerName.contains('drink') ||
+        lowerName.contains('soda')) {
+      return 'Beverages';
+    }
+    if (lowerName.contains('cake') ||
+        lowerName.contains('pastry') ||
+        lowerName.contains('forest') ||
+        lowerName.contains('biscuit') ||
+        lowerName.contains('bread') ||
+        lowerName.contains('cookie') ||
+        lowerName.contains('bun') ||
+        lowerName.contains('puff') ||
+        lowerName.contains('bakery')) {
+      return 'Bakery & Biscuits';
+    }
+    if (lowerName.contains('snack') ||
+        lowerName.contains('chip') ||
+        lowerName.contains('chips') ||
+        lowerName.contains('mixture') ||
+        lowerName.contains('murukku') ||
+        lowerName.contains('sev') ||
+        lowerName.contains('namkeen')) {
+      return 'Snacks';
+    }
+    if (lowerName.contains('chocolate') ||
+        lowerName.contains('candy') ||
+        lowerName.contains('sweet') ||
+        lowerName.contains('halwa') ||
+        lowerName.contains('laddu')) {
+      return 'Sweets & Chocolates';
+    }
+    if (lowerName.contains('detergent') ||
+        lowerName.contains('soap') ||
+        lowerName.contains('toothpaste') ||
+        lowerName.contains('brush') ||
+        lowerName.contains('oil') ||
+        lowerName.contains('rice') ||
+        lowerName.contains('flour') ||
+        lowerName.contains('sugar') ||
+        lowerName.contains('dal')) {
+      return 'Groceries';
+    }
+    return 'General';
+  }
+
+  final categorySearchQuery = ''.obs;
+  List<String> get filteredCategories {
+    final query = categorySearchQuery.value.trim().toLowerCase();
+    return categories.where((name) {
+      final id = billingCategories
+          .firstWhereOrNull((item) => item.name == name)
+          ?.id;
+      return query.isEmpty ||
+          name.toLowerCase().contains(query) ||
+          (id != null && id.toString().contains(query));
+    }).toList();
+  }
+
+  final selectedCategory = RxnString();
+  void selectCategory(String? category) {
+    searchController.clear();
+    searchQuery.value = '';
+    selectedCategory.value = category;
+    selectedCategoryId.value = billingCategories
+        .firstWhereOrNull((item) => item.name == category)
+        ?.id;
+    unawaited(getCategoryProducts());
+  }
+
+  void clearSelectedCategory() {
+    selectCategory(null);
+  }
+
+  Future<void> getCategoryProducts() async {
+    final useCase = _getCategoryProductsUseCase;
+    if (useCase == null) return;
+    final request = ++_categoryProductsRequest;
+    final id = selectedCategoryId.value;
+    categoryProducts.clear();
+    categoryProductsError.value = null;
+    isLoadingCategoryProducts.value = id != null;
+    if (id == null) return;
+    try {
+      final response = await useCase(id);
+      if (request != _categoryProductsRequest) return;
+      if (response.success == false) {
+        categoryProductsError.value =
+            response.message ?? 'Unable to load category products.';
+        return;
+      }
+      categoryProducts.assignAll(
+        (response.data ?? <api_model.Data>[])
+            .asMap()
+            .entries
+            .where((entry) => entry.value.isActive != false)
+            .map((entry) => _mapProduct(entry.key, entry.value)),
+      );
+      categoryProductCounts[id] = categoryProducts.length;
+    } catch (_) {
+      if (request == _categoryProductsRequest) {
+        categoryProductsError.value =
+            'Unable to load category products. Please try again.';
+      }
+    } finally {
+      if (request == _categoryProductsRequest) {
+        isLoadingCategoryProducts.value = false;
+      }
+    }
+  }
+
+  Future<void> getCategories() async {
+    final useCase = _getCategoriesUseCase;
+    if (useCase == null || isLoadingCategories.value) return;
+    isLoadingCategories.value = true;
+    categoryError.value = null;
+    try {
+      final response = await useCase();
+      if (!response.success) {
+        categoryError.value = response.message ?? 'Unable to load categories.';
+        return;
+      }
+      billingCategories.assignAll(response.data);
+      if (flow.value == PosFlow.categoryBilling &&
+          !categories.contains(selectedCategory.value)) {
+        clearSelectedCategory();
+      }
+    } catch (_) {
+      categoryError.value = 'Unable to load categories. Please try again.';
+    } finally {
+      isLoadingCategories.value = false;
+    }
+  }
+
+  List<String> get categories {
+    if (_getCategoriesUseCase != null) {
+      return billingCategories.map((category) => category.name).toList();
+    }
+    final set = <String>{};
+    for (final p in products) {
+      if (p.category.trim().isNotEmpty) {
+        set.add(p.category.trim());
+      }
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  bool _matchesCategory(Product product, String category) {
+    final apiCategory = billingCategories.firstWhereOrNull(
+      (item) => item.name.toLowerCase() == category,
+    );
+    if (apiCategory != null && product.categoryId != null) {
+      return product.categoryId == apiCategory.id;
+    }
+    final name = product.category.trim().toLowerCase();
+    if (apiCategory != null) return name == category;
+    return name == category ||
+        name.contains(category) ||
+        category.contains(name);
+  }
+
+  int getCategoryProductCount(String category) {
+    final id = billingCategories
+        .firstWhereOrNull((item) => item.name == category)
+        ?.id;
+    if (id != null && categoryProductCounts.containsKey(id)) {
+      return categoryProductCounts[id]!;
+    }
+    final cat = category.trim().toLowerCase();
+    if (cat.isEmpty) return products.length;
+    return products.where((p) {
+      return _matchesCategory(p, cat);
+    }).length;
+  }
+
+  List<Product> get categoryFilteredProducts {
+    if (selectedCategory.value == null) return <Product>[];
+    final cat = selectedCategory.value?.trim().toLowerCase();
+    final query = searchQuery.value.trim().toLowerCase();
+
+    List<Product> list;
+    if (_getCategoryProductsUseCase != null) {
+      list = categoryProducts.toList();
+    } else if (cat == null || cat.isEmpty) {
+      list = products;
+    } else {
+      list = products.where((p) {
+        return _matchesCategory(p, cat);
+      }).toList();
+    }
+
+    if (query.isNotEmpty) {
+      final exactIdMatches = list
+          .where((product) => _searchableProductId(product) == query)
+          .toList();
+      if (exactIdMatches.isNotEmpty) return exactIdMatches;
+
+      list = list
+          .where(
+            (product) =>
+                '${_searchableProductId(product)} '
+                        '${product.name} ${product.unit}'
+                    .toLowerCase()
+                    .contains(query),
+          )
+          .toList();
+    }
+    return list;
   }
 
   List<Product> get filteredProducts {
@@ -1324,9 +1616,12 @@ class HomeController extends GetxController {
   }
 
   int get itemCount => cart.fold(0, (sum, item) => sum + item.quantity);
-  double get subtotal =>
-      backendSubtotal.value ?? cart.fold(0, (sum, item) => sum + item.total);
-  double get tax => backendGst.value ?? 0;
+  double get subtotal => backendSubtotal.value ?? cartItemsSubtotal;
+  double get tax =>
+      backendGst.value ??
+      (flow.value == PosFlow.categoryBilling
+          ? cart.fold<double>(0, (sum, item) => sum + item.gstAmount)
+          : 0);
   double _discountFor(double baseSubtotal, double baseTax) {
     final value = discountValue.value;
     if (discountType.value == 'flat') {
@@ -1345,7 +1640,14 @@ class HomeController extends GetxController {
   /// Values derived from the rows currently displayed in the cart. Receipt
   /// printing uses these so partial backend totals are not mixed with the full
   /// local item list.
-  double get cartItemsSubtotal => cart.fold(0, (sum, item) => sum + item.total);
+  double get cartItemsSubtotal => cart.fold(
+    0,
+    (sum, item) =>
+        sum +
+        (flow.value == PosFlow.categoryBilling
+            ? item.subtotalBeforeGst
+            : item.total),
+  );
   double get cartItemsDiscountAmount => _discountFor(cartItemsSubtotal, tax);
   double get cartItemsTotal =>
       (cartItemsSubtotal + tax - cartItemsDiscountAmount + chargeAmount.value)
@@ -1394,8 +1696,9 @@ class HomeController extends GetxController {
   Future<bool> saveOrder({required int? staffId}) async {
     final useCase = _saveOrderUseCase;
     if (useCase == null) {
-      log('SaveOrderUseCase is not registered.', name: 'SaveOrder');
-      return true;
+      saveOrderError.value =
+          'Order service is unavailable. Please restart the app.';
+      return false;
     }
 
     if (staffId == null) {
@@ -2169,7 +2472,8 @@ class HomeController extends GetxController {
         );
         if (!saved) return false;
       } else if (!submittedKitchenTables.contains(tableId)) {
-        kotOrderError.value = 'Unable to hold the table before saving its order.';
+        kotOrderError.value =
+            'Unable to hold the table before saving its order.';
         return false;
       }
 
@@ -2611,6 +2915,13 @@ class HomeController extends GetxController {
         ),
       );
       if (response.status == false) {
+        if (flow.value == PosFlow.categoryBilling) {
+          final bill = holdCurrentBill();
+          _heldItemSnapshots[bill.id] = bill.items
+              .map((item) => item.copy())
+              .toList();
+          return bill;
+        }
         holdOrderError.value = response.message ?? 'Unable to hold the order.';
         log(holdOrderError.value!, name: 'HoldOrder');
         return null;
@@ -2633,6 +2944,13 @@ class HomeController extends GetxController {
       await getHoldOrders();
       return bill;
     } on DioException catch (error) {
+      if (flow.value == PosFlow.categoryBilling) {
+        final bill = holdCurrentBill();
+        _heldItemSnapshots[bill.id] = bill.items
+            .map((item) => item.copy())
+            .toList();
+        return bill;
+      }
       holdOrderError.value = _saveOrderApiError(error);
       log(
         'Hold order failed: ${holdOrderError.value}',
@@ -2641,6 +2959,13 @@ class HomeController extends GetxController {
       );
       return null;
     } catch (error, stackTrace) {
+      if (flow.value == PosFlow.categoryBilling) {
+        final bill = holdCurrentBill();
+        _heldItemSnapshots[bill.id] = bill.items
+            .map((item) => item.copy())
+            .toList();
+        return bill;
+      }
       holdOrderError.value = 'Unable to hold the order. Please try again.';
       log(
         'Unexpected hold-order error',
@@ -3266,16 +3591,15 @@ class HomeController extends GetxController {
       charge: chargeAmount.value,
       chargeReason: chargeReason.value,
       paymentMode: paymentMethod.value,
-      products: cart
-          .map(
-            (item) => SaveOrderProductRequest(
-              productId: item.product.id,
-              quantity: item.orderQuantity,
-              unitValue: item.apiUnitValue,
-              unit: item.apiUnit,
-            ),
-          )
-          .toList(),
+      products: cart.map((item) {
+        return SaveOrderProductRequest(
+          productId: item.product.id,
+          variantId: item.product.variantId,
+          quantity: item.orderQuantity,
+          unitValue: item.apiUnitValue,
+          unit: item.apiUnit,
+        );
+      }).toList(),
     );
   }
 

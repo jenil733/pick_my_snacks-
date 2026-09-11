@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 import 'package:pick_my_snacks/src/core/const/api_routes.dart';
 import 'package:pick_my_snacks/src/core/services/api_services.dart';
 import 'package:pick_my_snacks/src/data/model/get_table_status.dart';

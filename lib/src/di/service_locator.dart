@@ -1,3 +1,7 @@
+import 'package:pick_my_snacks/src/domain/usecase/get_category_products_usecase.dart';
+import 'package:pick_my_snacks/src/data/repository/category_repository_impl.dart';
+import 'package:pick_my_snacks/src/domain/repository/category_repository.dart';
+import 'package:pick_my_snacks/src/domain/usecase/get_categories_usecase.dart';
 import 'package:get/get.dart';
 import 'package:pick_my_snacks/src/core/services/api_services.dart';
 import 'package:pick_my_snacks/src/core/services/fcm_token_service.dart';
@@ -283,6 +287,25 @@ Future<String> setupServiceLocator() async {
     );
   }
 
+  if (!Get.isRegistered<CategoryRepository>()) {
+    Get.lazyPut<CategoryRepository>(
+      () => CategoryRepositoryImpl(Get.find<ApiService>()),
+      fenix: true,
+    );
+  }
+  if (!Get.isRegistered<GetCategoryProductsUseCase>()) {
+    Get.lazyPut<GetCategoryProductsUseCase>(
+      () => GetCategoryProductsUseCase(Get.find<CategoryRepository>()),
+      fenix: true,
+    );
+  }
+  if (!Get.isRegistered<GetCategoriesUseCase>()) {
+    Get.lazyPut<GetCategoriesUseCase>(
+      () => GetCategoriesUseCase(Get.find<CategoryRepository>()),
+      fenix: true,
+    );
+  }
+
   if (!Get.isRegistered<GetProductsUseCase>()) {
     Get.lazyPut<GetProductsUseCase>(
       () => GetProductsUseCase(Get.find<ProductRepository>()),
@@ -470,6 +493,8 @@ Future<String> setupServiceLocator() async {
         Get.find<GetLowStockProductsUseCase>(),
         Get.find<GetOutOfStockProductsUseCase>(),
         Get.find<GetNotificationCountUseCase>(),
+        Get.find<GetCategoriesUseCase>(),
+        Get.find<GetCategoryProductsUseCase>(),
       ),
       fenix: true,
     );

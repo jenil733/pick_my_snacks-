@@ -60,6 +60,14 @@ class PosSideMenu extends StatelessWidget {
             ),
             Obx(
               () => _MenuItem(
+                icon: Icons.grid_view_rounded,
+                label: 'Category Billing',
+                selected: controller.flow.value == PosFlow.categoryBilling,
+                onTap: () => _selectFlow(context, PosFlow.categoryBilling),
+              ),
+            ),
+            Obx(
+              () => _MenuItem(
                 icon: Icons.soup_kitchen_outlined,
                 label: 'KOT',
                 selected: controller.flow.value == PosFlow.kot,

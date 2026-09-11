@@ -73,8 +73,10 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> {
                         : 'Table ${widget.controller.activeTableNumber.value}'
                   : widget.controller.flow.value == PosFlow.takeAway
                   ? 'Take Away'
+                  : widget.controller.flow.value == PosFlow.categoryBilling
+                  ? 'Category Billing'
                   : 'Billing',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             ),
           ),
           actions: [

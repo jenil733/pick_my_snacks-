@@ -113,12 +113,15 @@ class Data {
     this.price,
     this.mrp,
     this.tax,
+    this.taxMode,
     this.stock,
     this.unitValue,
     this.unit,
     this.isActive,
     this.packedDate,
     this.expiryDate,
+    this.categoryName,
+    this.categoryId,
   });
 
   factory Data.fromJson(Map<String, dynamic> json) {
@@ -130,12 +133,19 @@ class Data {
       price: _toNum(json['price']),
       mrp: _toNum(json['mrp']),
       tax: _toNum(json['tax']),
+      taxMode: json['tax_mode']?.toString(),
       stock: _toNum(json['stock']),
       unitValue: _toNum(json['unit_value']),
       unit: json['unit']?.toString(),
       isActive: _toBool(json['is_active']),
       packedDate: json['packed_date'],
       expiryDate: json['expiry_date'],
+      categoryName: (json['category_name'] ?? json['category'])?.toString(),
+      categoryId: _toInt(
+        json['category_id'] ??
+            json['categoryId'] ??
+            json['kitchen_category_id'],
+      ),
     );
   }
 
@@ -146,12 +156,15 @@ class Data {
   final num? price;
   final num? mrp;
   final num? tax;
+  final String? taxMode;
   final num? stock;
   final num? unitValue;
   final String? unit;
   final bool? isActive;
   final Object? packedDate;
   final Object? expiryDate;
+  final String? categoryName;
+  final int? categoryId;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -161,12 +174,15 @@ class Data {
     'price': price,
     'mrp': mrp,
     'tax': tax,
+    'tax_mode': taxMode,
     'stock': stock,
     'unit_value': unitValue,
     'unit': unit,
     'is_active': isActive,
     'packed_date': packedDate,
     'expiry_date': expiryDate,
+    'category_name': categoryName,
+    'category_id': categoryId,
   };
 }
 
