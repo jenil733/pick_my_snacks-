@@ -226,12 +226,12 @@ class ProductThumbnail extends StatelessWidget {
 
     var pathStr = cleanPath;
     if (pathStr.startsWith('/')) pathStr = pathStr.substring(1);
-    if (pathStr.startsWith('storage/')) pathStr = pathStr.substring('storage/'.length);
-    if (pathStr.startsWith('public/')) pathStr = pathStr.substring('public/'.length);
+    if (pathStr.startsWith('storage/'))
+      pathStr = pathStr.substring('storage/'.length);
+    if (pathStr.startsWith('public/'))
+      pathStr = pathStr.substring('public/'.length);
 
-    final fullUrl = isHttp
-        ? cleanPath
-        : pathStr;
+    final fullUrl = isHttp ? cleanPath : pathStr;
 
     if (Uri.tryParse(fullUrl)?.path.toLowerCase().endsWith('.svg') == true) {
       return SvgPicture.network(
@@ -264,15 +264,14 @@ class ProductThumbnail extends StatelessWidget {
               strokeWidth: 1.5,
               value: loadingProgress.expectedTotalBytes != null
                   ? loadingProgress.cumulativeBytesLoaded /
-                      (loadingProgress.expectedTotalBytes ?? 1)
+                        (loadingProgress.expectedTotalBytes ?? 1)
                   : null,
               color: AppColors.yellowDark,
             ),
           ),
         );
       },
-      errorBuilder: (context, error, stackTrace) =>
-          const _DefaultProductIcon(),
+      errorBuilder: (context, error, stackTrace) => const _DefaultProductIcon(),
     );
   }
 }
@@ -292,7 +291,7 @@ class _DefaultProductIcon extends StatelessWidget {
   }
 }
 
-String money(double value) => '₹${value.toStringAsFixed(2)}';
+String money(double value) => '₹${value.round().toStringAsFixed(2)}';
 
 class EditableItemAmount extends StatelessWidget {
   const EditableItemAmount({
@@ -580,4 +579,3 @@ Future<void> deleteKotTableOrder(
   }
   AppToast.show(context, 'Table $tableId is now free.');
 }
-

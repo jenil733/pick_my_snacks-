@@ -724,9 +724,9 @@ void main() {
     expect(_rasterInkRatio(bytes), greaterThan(.05));
     expect(_rasterInkRatio(bytes), lessThan(.60));
     expect(receiptText, contains('Vettturnimadam, Nagercoil'));
-    expect(receiptText, contains('- 629001  CELL: 7339595793'));
+    expect(receiptText, contains('- 629001  CELL: 9943873319'));
     expect(receiptText, isNot(contains('GSTIN')));
-    expect(receiptText, contains('CELL: 7339595793'));
+    expect(receiptText, contains('CELL: 9943873319'));
     expect(receiptText, contains('   ORIGINAL'));
     expect(receiptText, contains('Order No: ORD0012'));
     expect(receiptText, contains('Item'));
@@ -787,7 +787,7 @@ void main() {
 
     expect(billText, contains('DUPLICATE'));
     expect(billText, isNot(contains('GSTIN')));
-    expect(billText, contains('CELL:7339595793'));
+    expect(billText, contains('CELL:9943873319'));
     expect(billText, contains('Bill No: ORD19711'));
     expect(billText, contains('Staff: Sam'));
     expect(billText, contains('Product'));

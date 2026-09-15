@@ -291,7 +291,7 @@ class ReceiptPrinterService {
     );
     bytes.addAll(
       generator.text(
-        '- 629001  CELL: 7339595793',
+        '- 629001  CELL: 9943873319',
         styles: const PosStyles(
           align: PosAlign.center,
           fontType: PosFontType.fontB,
@@ -511,7 +511,7 @@ class ReceiptPrinterService {
     );
     bytes.addAll(
       generator.text(
-        'CELL:7339595793',
+        'CELL:9943873319',
         styles: const PosStyles(
           align: PosAlign.center,
           fontType: PosFontType.fontB,
@@ -873,7 +873,7 @@ class ReceiptPrinterService {
     return lines.isEmpty ? [''] : lines;
   }
 
-  String _amount(double value) => value.toStringAsFixed(2);
+  String _amount(double value) => value.round().toString();
 
   String _percentage(double value) {
     final rounded = value.roundToDouble();
