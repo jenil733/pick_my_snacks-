@@ -485,16 +485,15 @@ class MobileBillingScreen extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: controller.isSavingKotOrder.value
+                onPressed:
+                    controller.isSavingKotOrder.value ||
+                        !controller.hasPendingKitchenItems
                     ? null
                     : () => sendKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: Text(
                   controller.isSavingKotOrder.value
                       ? 'Sending...'
-                      : controller.hasKitchenOrderAwaitingPrint &&
-                            !controller.hasSelectedPendingKitchenItems
-                      ? 'Retry Kitchen Bill'
                       : 'Kitchen Bill',
                 ),
                 style: FilledButton.styleFrom(
