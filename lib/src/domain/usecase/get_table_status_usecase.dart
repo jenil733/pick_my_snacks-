@@ -6,5 +6,13 @@ class GetTableStatusUseCase {
 
   final TableStatusRepository _repository;
 
-  Future<TableStatusResponse> call() => _repository.getTableStatuses();
+  Future<TableStatusResponse> call({
+    int? staffId,
+    required String paymentMode,
+    List<int> productIds = const <int>[1],
+  }) => _repository.getTableStatuses(
+    staffId: staffId,
+    paymentMode: paymentMode,
+    productIds: productIds,
+  );
 }

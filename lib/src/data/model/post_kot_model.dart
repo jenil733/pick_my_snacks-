@@ -14,6 +14,8 @@ class KotOrderRequest {
     this.chargeReason = '',
     this.customerName,
     this.customerPhone,
+    this.personId,
+    this.userId,
     this.isKot = true,
     this.printKitchen = true,
   });
@@ -30,6 +32,8 @@ class KotOrderRequest {
   final String chargeReason;
   final String? customerName;
   final String? customerPhone;
+  final String? personId;
+  final int? userId;
   final bool isKot;
   final bool printKitchen;
 
@@ -39,6 +43,9 @@ class KotOrderRequest {
       'staff_id': staffId,
       'payment_mode': paymentMode,
       'discount_type': discountType,
+      'discount': discountType == 'none' ? 0 : discountValue,
+      'offer': offer.trim().isEmpty ? 0 : offer.trim(),
+      'charge': charge,
       'is_kot': isKot ? 1 : 0,
       'print_kitchen': printKitchen ? 1 : 0,
     };
@@ -63,6 +70,11 @@ class KotOrderRequest {
     if (normalizedCustomerPhone != null && normalizedCustomerPhone.isNotEmpty) {
       fields['customer_phone'] = normalizedCustomerPhone;
     }
+    final normalizedPersonId = personId?.trim();
+    if (normalizedPersonId != null && normalizedPersonId.isNotEmpty) {
+      fields['person_id'] = normalizedPersonId;
+    }
+    if (userId != null) fields['user_id'] = userId;
     for (var index = 0; index < products.length; index++) {
       final product = products[index];
       fields['products[$index][product_id]'] = product.productId;

@@ -5,6 +5,7 @@ import 'package:pick_my_snacks/src/data/model/get_saveorder.dart';
 import 'package:pick_my_snacks/src/data/model/post_kot_model.dart';
 import 'package:pick_my_snacks/src/data/model/processing.dart';
 import 'package:pick_my_snacks/src/data/model/remove_kot_product.dart';
+import 'package:pick_my_snacks/src/data/model/kot_save_request.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_order_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/delete_held_bill_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_save_repository.dart';
@@ -19,10 +20,18 @@ import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_contr
 
 void main() {
   test('builds the KOT product removal request', () {
-    const request = RemoveKotProductRequest(orderId: 12, detailId: 91);
+    const request = RemoveKotProductRequest(
+      orderId: 235,
+      personId: 'P1-260918-8',
+      detailId: 266,
+    );
 
     expect(ApiRoutes.remove, 'kot_hold_remove_product');
-    expect(request.toFormFields(), {'order_id': 12, 'detail_id': 91});
+    expect(request.toFormFields(), {
+      'order_id': 235,
+      'detail_id': 266,
+      'person_id': 'P1-260918-8',
+    });
   });
 
   test('parses the remove response and all updated backend totals', () {
@@ -77,6 +86,14 @@ void main() {
       RemoveKotProductUseCase(removeRepository),
     );
     controller.takeKotTable(1, staffName: 'Staff');
+    controller.kotPersonBills[1] = <KotPersonBill>[
+      KotPersonBill(
+        personNumber: 1,
+        personId: 'P1-260918-8',
+        order: controller.tableOrders[1]!,
+      ),
+    ];
+    controller.activeKotPersonNumber.value = 1;
     controller.addProduct(
       const Product(id: 6, name: 'DFGVH', unit: 'kg', price: 45, image: ''),
     );
@@ -102,6 +119,7 @@ void main() {
     expect(await controller.removeKotProduct(controller.cart.last), isTrue);
     expect(removeRepository.requests.single.orderId, 107);
     expect(removeRepository.requests.single.detailId, 174);
+    expect(removeRepository.requests.single.personId, 'P1-260918-8');
   });
 
   test('removes a sent product without closing its backend order', () async {
@@ -428,8 +446,8 @@ class _FakeKotSaveRepository implements KotSaveRepository {
   final tableIds = <int>[];
 
   @override
-  Future<KotSaveResponse> saveKot(int tableId) async {
-    tableIds.add(tableId);
+  Future<KotSaveResponse> saveKot(KotSaveRequest request) async {
+    tableIds.add(request.tableId);
     return const KotSaveResponse(status: true, message: 'Bill closed');
   }
 }

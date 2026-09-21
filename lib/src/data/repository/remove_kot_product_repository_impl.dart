@@ -20,7 +20,7 @@ class RemoveKotProductRepositoryImpl implements RemoveKotProductRepository {
     log('Request fields: $fields', name: 'RemoveKotProduct');
     log(
       'DELETE TARGET -> order_id=${request.orderId}, '
-      'detail_id=${request.detailId}',
+      'person_id=${request.personId}, detail_id=${request.detailId}',
       name: 'RemoveKotProduct',
     );
 

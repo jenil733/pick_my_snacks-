@@ -2,15 +2,24 @@ class RemoveKotProductRequest {
   const RemoveKotProductRequest({
     required this.orderId,
     required this.detailId,
+    this.personId,
   });
 
   final int orderId;
   final int detailId;
+  final String? personId;
 
-  Map<String, dynamic> toFormFields() => <String, dynamic>{
-    'order_id': orderId,
-    'detail_id': detailId,
-  };
+  Map<String, dynamic> toFormFields() {
+    final fields = <String, dynamic>{
+      'order_id': orderId,
+      'detail_id': detailId,
+    };
+    final normalizedPersonId = personId?.trim();
+    if (normalizedPersonId != null && normalizedPersonId.isNotEmpty) {
+      fields['person_id'] = normalizedPersonId;
+    }
+    return fields;
+  }
 }
 
 class RemoveKotProductResponse {

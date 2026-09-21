@@ -68,7 +68,10 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> {
               widget.controller.flow.value == PosFlow.kot
                   ? widget.controller.kotStage.value == KotStage.tables
                         ? 'KOT Tables'
-                        : widget.controller.kotStage.value == KotStage.details
+                        : widget.controller.kotStage.value ==
+                                  KotStage.details ||
+                              widget.controller.kotStage.value ==
+                                  KotStage.persons
                         ? 'Table ${widget.controller.selectedKotTableNumber.value}'
                         : 'Table ${widget.controller.activeTableNumber.value}'
                   : widget.controller.flow.value == PosFlow.takeAway

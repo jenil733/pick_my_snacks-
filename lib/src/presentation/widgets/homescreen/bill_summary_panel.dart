@@ -310,10 +310,7 @@ class BillSummaryPanel extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed:
-                    (!controller.hasSelectedPendingKitchenItems &&
-                            !controller.hasKitchenOrderAwaitingPrint) ||
-                        controller.isSavingKotOrder.value
+                onPressed: controller.isSavingKotOrder.value
                     ? null
                     : () => sendKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
@@ -809,31 +806,10 @@ Future<void> printReceipt(
 
 Future<bool> sendKotBill(
   BuildContext context,
-  HomeController controller, {
-  bool selectedOnly = true,
-}) async {
+  HomeController controller,
+) async {
   final hasCustomerDetails = await _requireCustomerDetails(context, controller);
   if (!hasCustomerDetails || !context.mounted) return false;
-
-  final newItems =
-      (selectedOnly
-              ? controller.selectedPendingKitchenItems
-              : controller.pendingKitchenItems)
-          .map((item) => item.copy())
-          .toList(growable: false);
-  final retryItems = controller.hasKitchenOrderAwaitingPrint
-      ? controller.lastKitchenOrderItems
-            .map((item) => item.copy())
-            .toList(growable: false)
-      : <CartItem>[];
-  final items = <CartItem>[...retryItems, ...newItems];
-  if (items.isEmpty) {
-    if (selectedOnly) {
-      _showPrinterToast(context, 'Select at least one new product to send.');
-      return false;
-    }
-    return true;
-  }
 
   final staffController = Get.isRegistered<StaffController>()
       ? Get.find<StaffController>()
@@ -841,8 +817,11 @@ Future<bool> sendKotBill(
   final staff = staffController?.selectedStaff.value;
   final orderSaved = await controller.saveKitchenOrder(
     staffId: staff?.id,
-    selectedOnly: selectedOnly,
+    // Send every pending product so the API receives a complete order. Only
+    // checked products are marked as kitchen products (`is_kot=1`).
+    selectedOnly: false,
     prepareForKitchenPrint: true,
+    markAsKitchen: false,
   );
   if (!context.mounted) return false;
   if (!orderSaved) {
@@ -852,10 +831,11 @@ Future<bool> sendKotBill(
     );
     return false;
   }
-  AppToast.show(context, 'Bill is printed on kitchen');
   final printableItems = controller.lastKitchenOrderItems
       .map((item) => item.copy())
       .toList(growable: false);
+  if (printableItems.isEmpty) return true;
+  AppToast.show(context, 'Bill is printed on kitchen');
   final printed = await _printKitchenTicket(
     context,
     items: printableItems,

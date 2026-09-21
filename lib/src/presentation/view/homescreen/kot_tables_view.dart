@@ -4,7 +4,7 @@ import 'package:pick_my_snacks/src/core/const/appcolors.dart';
 import 'package:pick_my_snacks/src/data/model/get_table_status.dart';
 import 'package:pick_my_snacks/src/data/model/processing.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
-import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
+import 'package:pick_my_snacks/src/presentation/view/homescreen/kot_persons_view.dart';
 
 class KotTablesView extends StatelessWidget {
   const KotTablesView({required this.controller, this.onOpenOrder, super.key});
@@ -32,6 +32,9 @@ class KotTablesView extends StatelessWidget {
       final selectedOrder = selectedTableNumber == null
           ? null
           : orders[selectedTableNumber];
+      if (controller.kotStage.value == KotStage.persons) {
+        return KotPersonsView(controller: controller, onOpenOrder: onOpenOrder);
+      }
       if (controller.kotStage.value == KotStage.details) {
         if (selectedOrder != null) {
           return _KotTableDetailsView(
@@ -159,23 +162,24 @@ class KotTablesView extends StatelessWidget {
                       final tableNumber = tableNumbers[index];
                       final order = orders[tableNumber];
                       final status = statuses[tableNumber];
+                      final localPersonCount =
+                          controller.kotPersonBills[tableNumber]
+                              ?.where((bill) => bill.isConfirmed)
+                              .length ??
+                          0;
                       return _TableTile(
                         tableNumber: tableNumber,
                         order: order,
+                        localPersonCount: localPersonCount,
                         localOrderSubmitted: submittedTables.contains(
                           tableNumber,
                         ),
                         processingOrder: processingOrders[tableNumber],
                         apiStatus: status,
-                        onTakeOrder: order != null
-                            ? () => controller.continueKotTable(tableNumber)
-                            : () => _takeOrder(tableNumber),
-                        onOpenOrder:
-                            (order != null &&
-                                    submittedTables.contains(tableNumber)) ||
-                                status?.occupied == true
-                            ? () => controller.showKotTableDetails(tableNumber)
-                            : null,
+                        onTakeOrder: () =>
+                            controller.showKotPersons(tableNumber),
+                        onOpenOrder: () =>
+                            controller.showKotPersons(tableNumber),
                       );
                     },
                   ),
@@ -186,18 +190,6 @@ class KotTablesView extends StatelessWidget {
         );
       },
     );
-  }
-
-  void _takeOrder(int tableNumber) {
-    final staffController = Get.isRegistered<StaffController>()
-        ? Get.find<StaffController>()
-        : null;
-    controller.takeKotTable(
-      tableNumber,
-      staffName: staffController?.selectedStaffName ?? 'Staff',
-      staffId: staffController?.selectedStaff.value?.id,
-    );
-    onOpenOrder?.call();
   }
 }
 
@@ -477,6 +469,7 @@ class _TableTile extends StatelessWidget {
   const _TableTile({
     required this.tableNumber,
     required this.order,
+    required this.localPersonCount,
     required this.localOrderSubmitted,
     required this.processingOrder,
     required this.apiStatus,
@@ -486,6 +479,7 @@ class _TableTile extends StatelessWidget {
 
   final int tableNumber;
   final KotTableOrder? order;
+  final int localPersonCount;
   final bool localOrderSubmitted;
   final ProcessingOrderData? processingOrder;
   final TableStatusData? apiStatus;
@@ -501,11 +495,16 @@ class _TableTile extends StatelessWidget {
         : apiStatus?.displayStatus ?? (occupied ? 'Occupied' : 'Free');
     final hasOrder = occupied;
     final remoteOrder = processingOrder?.order;
-    final remoteItemCount =
-        (remoteOrder?.products ?? const <ProcessingProduct>[]).fold<int>(
-          0,
-          (sum, item) => sum + (item.quantity ?? 0),
-        );
+    final remotePersonCount = _personCountForTable(
+      apiStatus: apiStatus,
+      processingOrder: processingOrder,
+      occupied: occupied,
+    );
+    final displayedLocalPersonCount = localPersonCount > 0
+        ? localPersonCount
+        : order == null
+        ? 0
+        : 1;
     final remoteStaffName = remoteOrder?.staffName?.trim();
     return Material(
       color: occupied ? const Color(0xFFFFF7ED) : AppColors.surface,
@@ -557,11 +556,14 @@ class _TableTile extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 occupied && order != null
-                    ? '${order!.itemCount} items - ${order!.staffName}'
+                    ? '$displayedLocalPersonCount '
+                          '${displayedLocalPersonCount == 1 ? 'Person' : 'Persons'} - '
+                          '${order!.staffName}'
                     : occupied && apiOccupied
                     ? remoteOrder == null
                           ? 'Order details'
-                          : '$remoteItemCount items - '
+                          : '$remotePersonCount '
+                                '${remotePersonCount == 1 ? 'Person' : 'Persons'} - '
                                 '${remoteStaffName?.isNotEmpty == true ? remoteStaffName : 'Staff'}'
                     : 'Available for a new order',
                 maxLines: 1,
@@ -606,6 +608,38 @@ class _TableTile extends StatelessWidget {
       ),
     );
   }
+}
+
+int _personCountForTable({
+  required TableStatusData? apiStatus,
+  required ProcessingOrderData? processingOrder,
+  required bool occupied,
+}) {
+  final apiCount = apiStatus?.personCount;
+  if (apiCount != null && apiCount > 0) return apiCount;
+
+  final persons = processingOrder?.persons ?? const <ProcessingOrder>[];
+  if (persons.isNotEmpty) {
+    final personIds = persons
+        .map((person) => person.personId?.trim())
+        .whereType<String>()
+        .where((personId) => personId.isNotEmpty)
+        .toSet();
+    return personIds.isNotEmpty ? personIds.length : persons.length;
+  }
+
+  final productPersonIds =
+      (processingOrder?.order?.products ?? const <ProcessingProduct>[])
+          .map((product) => product.personId?.trim())
+          .whereType<String>()
+          .where((personId) => personId.isNotEmpty)
+          .toSet();
+  if (productPersonIds.isNotEmpty) return productPersonIds.length;
+
+  // processing_order_count and hold-order IDs count KOT submissions, not
+  // people. An occupied table without person metadata represents at least one
+  // person, regardless of how many kitchen orders were submitted.
+  return occupied ? 1 : 0;
 }
 
 class _DetailRow extends StatelessWidget {

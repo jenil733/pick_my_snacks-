@@ -16,6 +16,9 @@ import 'package:pick_my_snacks/src/data/repository/get_hold_orders_repository_im
 import 'package:pick_my_snacks/src/data/repository/login_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/hold_order_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/kot_order_repository_impl.dart';
+import 'package:pick_my_snacks/src/data/repository/kot_add_person_repository_impl.dart';
+import 'package:pick_my_snacks/src/data/repository/kot_delete_person_repository_impl.dart';
+import 'package:pick_my_snacks/src/data/repository/kot_get_persons_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/kot_save_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/order_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/staff_repository_impl.dart';
@@ -32,6 +35,9 @@ import 'package:pick_my_snacks/src/domain/repository/get_hold_orders_repository.
 import 'package:pick_my_snacks/src/domain/repository/hold_order_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/login_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_order_repository.dart';
+import 'package:pick_my_snacks/src/domain/repository/kot_add_person_repository.dart';
+import 'package:pick_my_snacks/src/domain/repository/kot_delete_person_repository.dart';
+import 'package:pick_my_snacks/src/domain/repository/kot_get_persons_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_save_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/order_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/product_repository.dart';
@@ -63,6 +69,9 @@ import 'package:pick_my_snacks/src/domain/usecase/get_low_stock_products_usecase
 import 'package:pick_my_snacks/src/domain/usecase/get_out_of_stock_products_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_notification_count_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_order_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/add_kot_person_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/delete_kot_person_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/get_kot_persons_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/take_away_hold_usecase.dart';
@@ -185,6 +194,27 @@ Future<String> setupServiceLocator() async {
   if (!Get.isRegistered<KotOrderRepository>()) {
     Get.lazyPut<KotOrderRepository>(
       () => KotOrderRepositoryImpl(Get.find<ApiService>()),
+      fenix: true,
+    );
+  }
+
+  if (!Get.isRegistered<KotAddPersonRepository>()) {
+    Get.lazyPut<KotAddPersonRepository>(
+      () => KotAddPersonRepositoryImpl(Get.find<ApiService>()),
+      fenix: true,
+    );
+  }
+
+  if (!Get.isRegistered<KotDeletePersonRepository>()) {
+    Get.lazyPut<KotDeletePersonRepository>(
+      () => KotDeletePersonRepositoryImpl(Get.find<ApiService>()),
+      fenix: true,
+    );
+  }
+
+  if (!Get.isRegistered<KotGetPersonsRepository>()) {
+    Get.lazyPut<KotGetPersonsRepository>(
+      () => KotGetPersonsRepositoryImpl(Get.find<ApiService>()),
       fenix: true,
     );
   }
@@ -376,6 +406,27 @@ Future<String> setupServiceLocator() async {
     );
   }
 
+  if (!Get.isRegistered<AddKotPersonUseCase>()) {
+    Get.lazyPut<AddKotPersonUseCase>(
+      () => AddKotPersonUseCase(Get.find<KotAddPersonRepository>()),
+      fenix: true,
+    );
+  }
+
+  if (!Get.isRegistered<DeleteKotPersonUseCase>()) {
+    Get.lazyPut<DeleteKotPersonUseCase>(
+      () => DeleteKotPersonUseCase(Get.find<KotDeletePersonRepository>()),
+      fenix: true,
+    );
+  }
+
+  if (!Get.isRegistered<GetKotPersonsUseCase>()) {
+    Get.lazyPut<GetKotPersonsUseCase>(
+      () => GetKotPersonsUseCase(Get.find<KotGetPersonsRepository>()),
+      fenix: true,
+    );
+  }
+
   if (!Get.isRegistered<SaveKotUseCase>()) {
     Get.lazyPut<SaveKotUseCase>(
       () => SaveKotUseCase(Get.find<KotSaveRepository>()),
@@ -495,6 +546,9 @@ Future<String> setupServiceLocator() async {
         Get.find<GetNotificationCountUseCase>(),
         Get.find<GetCategoriesUseCase>(),
         Get.find<GetCategoryProductsUseCase>(),
+        Get.find<AddKotPersonUseCase>(),
+        Get.find<DeleteKotPersonUseCase>(),
+        Get.find<GetKotPersonsUseCase>(),
       ),
       fenix: true,
     );

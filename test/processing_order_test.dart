@@ -6,16 +6,23 @@ import 'package:pick_my_snacks/src/data/model/get_staff.dart';
 import 'package:pick_my_snacks/src/data/model/get_table_status.dart';
 import 'package:pick_my_snacks/src/data/model/get_saveorder.dart';
 import 'package:pick_my_snacks/src/data/model/processing.dart';
+import 'package:pick_my_snacks/src/data/model/kot_save_request.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_save_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/processing_order_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/table_status_repository.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_processing_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_table_status_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_usecase.dart';
+import 'package:pick_my_snacks/src/presentation/controller/homescreen/cart_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
 
 void main() {
+  setUp(() {
+    Get.testMode = true;
+    Get.put(CartController());
+  });
+
   tearDown(Get.reset);
 
   test('builds a table-specific processing-order endpoint', () {
@@ -59,6 +66,64 @@ void main() {
     expect(order.processingOrderNumbers.last, 'KOT10008');
     expect(order.products!.single.holdOrderId, 85);
     expect(order.products!.single.holdOrderNumber, 'KOT10007');
+  });
+
+  test('aggregates the new per-person processing response after restart', () {
+    final response = ProcessingOrderResponse.fromJson({
+      'status': true,
+      'data': {
+        'is_processing': true,
+        'person_count': 2,
+        'table': {'id': 1, 'table_id': 1, 'branch_id': 1},
+        'persons': [
+          {
+            'person_id': 'P1-260918-8',
+            'processing_order_count': 1,
+            'processing_order_ids': [255],
+            'processing_order_numbers': ['KOT10197'],
+            'staff_id': 3,
+            'staff_name': 'test',
+            'total': 999.89,
+            'products': [
+              {
+                'id': 287,
+                'hold_order_id': 255,
+                'product_id': 1,
+                'product_name': 'black forest',
+                'quantity': 1,
+              },
+            ],
+          },
+          {
+            'person_id': 'P1-260918-9',
+            'processing_order_count': 1,
+            'processing_order_ids': [256],
+            'processing_order_numbers': ['KOT10198'],
+            'staff_id': 3,
+            'staff_name': 'test',
+            'total': 999.89,
+            'products': [
+              {
+                'id': 288,
+                'hold_order_id': 256,
+                'product_id': 1,
+                'product_name': 'black forest',
+                'quantity': 1,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    final data = response.data!;
+    expect(data.persons, hasLength(2));
+    expect(data.order?.processingOrderCount, 2);
+    expect(data.order?.processingOrderIds, [255, 256]);
+    expect(data.order?.products, hasLength(2));
+    expect(data.order?.products?.first.personId, 'P1-260918-8');
+    expect(data.order?.products?.last.personId, 'P1-260918-9');
+    expect(data.order?.total, closeTo(1999.78, 0.001));
   });
 
   test(
@@ -240,6 +305,28 @@ void main() {
   });
 
   test(
+    'keeps the person screen open when a table-status refresh reports free',
+    () async {
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        GetTableStatusUseCase(_FreeStatusRepository()),
+      );
+
+      await controller.showKotPersons(8);
+      await controller.getTableStatuses(silent: true);
+
+      expect(controller.kotStage.value, KotStage.persons);
+      expect(controller.selectedKotTableNumber.value, 8);
+    },
+  );
+
+  test(
     'a refreshed occupied API status replaces the locally closed state',
     () async {
       const response = ProcessingOrderResponse(
@@ -322,8 +409,8 @@ class _ClosingKotRepository implements KotSaveRepository {
   final tableIds = <int>[];
 
   @override
-  Future<KotSaveResponse> saveKot(int tableId) async {
-    tableIds.add(tableId);
+  Future<KotSaveResponse> saveKot(KotSaveRequest request) async {
+    tableIds.add(request.tableId);
     return const KotSaveResponse(status: true, message: 'Bill closed');
   }
 }
@@ -353,7 +440,11 @@ class _ProcessingRepository implements ProcessingOrderRepository {
 
 class _FreeStatusRepository implements TableStatusRepository {
   @override
-  Future<TableStatusResponse> getTableStatuses() async {
+  Future<TableStatusResponse> getTableStatuses({
+    int? staffId,
+    required String paymentMode,
+    List<int> productIds = const <int>[1],
+  }) async {
     return const TableStatusResponse(
       status: true,
       data: [
@@ -365,7 +456,11 @@ class _FreeStatusRepository implements TableStatusRepository {
 
 class _OccupiedStatusRepository implements TableStatusRepository {
   @override
-  Future<TableStatusResponse> getTableStatuses() async {
+  Future<TableStatusResponse> getTableStatuses({
+    int? staffId,
+    required String paymentMode,
+    List<int> productIds = const <int>[1],
+  }) async {
     return const TableStatusResponse(
       status: true,
       data: [
@@ -382,7 +477,11 @@ class _OccupiedStatusRepository implements TableStatusRepository {
 
 class _NotFoundStatusRepository implements TableStatusRepository {
   @override
-  Future<TableStatusResponse> getTableStatuses() async {
+  Future<TableStatusResponse> getTableStatuses({
+    int? staffId,
+    required String paymentMode,
+    List<int> productIds = const <int>[1],
+  }) async {
     final options = dio.RequestOptions(path: 'kot_table_status');
     throw dio.DioException(
       requestOptions: options,

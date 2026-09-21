@@ -7,6 +7,7 @@ import 'package:pick_my_snacks/src/data/model/get_saveorder.dart';
 import 'package:pick_my_snacks/src/data/model/get_table_status.dart';
 import 'package:pick_my_snacks/src/data/model/get_staff.dart';
 import 'package:pick_my_snacks/src/data/model/post_kot_model.dart';
+import 'package:pick_my_snacks/src/data/model/kot_save_request.dart';
 import 'package:pick_my_snacks/src/data/model/processing.dart';
 import 'package:pick_my_snacks/src/data/model/remove_kot_quantity.dart';
 import 'package:pick_my_snacks/src/data/model/save_order.dart';
@@ -21,15 +22,23 @@ import 'package:pick_my_snacks/src/domain/usecase/save_kot_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_order_usecase.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
+import 'package:pick_my_snacks/src/presentation/controller/homescreen/cart_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_summary_panel.dart';
 
 void main() {
+  setUp(() {
+    Get.put(CartController());
+  });
+
+  tearDown(Get.reset);
+
   test('builds the KOT request with table, staff, and product fields', () {
     const request = KotOrderRequest(
       tableId: 4,
       staffId: 7,
       paymentMode: 'cash',
+      personId: 'P1-260918-1',
       products: [
         SaveOrderProductRequest(productId: 10, quantity: 2, note: 'extra salt'),
       ],
@@ -40,8 +49,13 @@ void main() {
     expect(fields['table_id'], 4);
     expect(fields['staff_id'], 7);
     expect(fields['payment_mode'], 'cash');
+    expect(fields['person_id'], 'P1-260918-1');
+    expect(fields.containsKey('user_id'), isFalse);
     expect(fields['discount_type'], 'none');
     expect(fields['is_kot'], 1);
+    expect(fields['discount'], 0);
+    expect(fields['offer'], 0);
+    expect(fields['charge'], 0);
     expect(fields['products[0][is_kot]'], 1);
     expect(fields['products[0][qty]'], '2pcs');
     expect(fields['products[0][note]'], 'extra salt');
@@ -65,6 +79,56 @@ void main() {
     expect(fields['products[0][is_kot]'], 1);
     expect(fields['products[1][is_kot]'], 0);
   });
+
+  test(
+    'Kitchen Bill sends all pending products with selected KOT flags',
+    () async {
+      final repository = _FakeKotOrderRepository();
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        SaveKotOrderUseCase(repository),
+      );
+      controller.takeKotTable(3, staffName: 'Arun');
+      controller.addProduct(
+        const Product(id: 101, name: 'Naan', unit: 'pcs', price: 50, image: ''),
+      );
+      controller.addProduct(
+        const Product(
+          id: 202,
+          name: 'Juice',
+          unit: 'ltr',
+          price: 80,
+          image: '',
+        ),
+      );
+      controller.setKitchenItemSelected(controller.cart.last, true);
+
+      expect(
+        await controller.saveKitchenOrder(
+          staffId: 3,
+          selectedOnly: false,
+          markAsKitchen: false,
+        ),
+        isTrue,
+      );
+
+      final request = repository.requests.single;
+      expect(request.userId, isNull);
+      expect(request.printKitchen, isTrue);
+      expect(request.products, hasLength(2));
+      expect(request.products[0].isKot, isFalse);
+      expect(request.products[1].isKot, isTrue);
+      expect(controller.lastKitchenOrderItems.single.product.id, 202);
+    },
+  );
 
   test('Kitchen Bill sends only items added since the previous send', () async {
     final repository = _FakeKotOrderRepository();
@@ -138,9 +202,9 @@ void main() {
     controller.confirmKitchenOrderPrinted();
     final duplicateSaved = await controller.saveKitchenOrder(staffId: 7);
 
-    expect(duplicateSaved, isFalse);
+    expect(duplicateSaved, isTrue);
     expect(repository.requests, hasLength(2));
-    expect(controller.kotOrderError.value, 'No new kitchen items to send.');
+    expect(controller.kotOrderError.value, isNull);
     expect(normalRepository.requests, isEmpty);
 
     controller.tableStatuses[3] = const TableStatusData(
@@ -269,6 +333,50 @@ void main() {
       expect(repository.requests, hasLength(2));
       expect(repository.requests.last.products.single.productId, 101);
       expect(repository.requests.last.products.single.quantity, 1);
+    },
+  );
+
+  test(
+    'increased quantity stays selected after cart items are copied',
+    () async {
+      final repository = _FakeKotOrderRepository();
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        SaveKotOrderUseCase(repository),
+      );
+      controller.takeKotTable(3, staffName: 'Arun');
+      controller.addProduct(
+        const Product(id: 101, name: 'Naan', unit: 'pcs', price: 50, image: ''),
+      );
+      controller.setKitchenItemSelected(controller.cart.single, true);
+      expect(
+        await controller.saveKitchenOrder(staffId: 7, selectedOnly: true),
+        isTrue,
+      );
+      controller.confirmKitchenOrderPrinted();
+
+      final copiedCart = controller.cart.map((item) => item.copy()).toList();
+      controller.cart.assignAll(copiedCart);
+      controller.increment(controller.cart.single);
+
+      expect(controller.isKitchenItemSelected(controller.cart.single), isTrue);
+      expect(controller.selectedPendingKitchenItems, hasLength(1));
+      expect(controller.selectedPendingKitchenItems.single.quantity, 1);
+      expect(
+        await controller.saveKitchenOrder(staffId: 7, selectedOnly: true),
+        isTrue,
+      );
+      expect(repository.requests, hasLength(2));
+      expect(repository.requests.last.products.single.quantity, 1);
+      expect(repository.requests.last.products.single.isKot, isTrue);
     },
   );
 
@@ -414,6 +522,7 @@ void main() {
       final saved = await controller.saveKitchenOrder(
         staffId: 7,
         prepareForKitchenPrint: false,
+        printKitchen: false,
       );
 
       expect(saved, isTrue);
@@ -754,15 +863,15 @@ class _TrackingKotSaveRepository implements KotSaveRepository {
   final tableIds = <int>[];
 
   @override
-  Future<KotSaveResponse> saveKot(int tableId) async {
-    tableIds.add(tableId);
+  Future<KotSaveResponse> saveKot(KotSaveRequest request) async {
+    tableIds.add(request.tableId);
     return KotSaveResponse(
       status: true,
       data: KotSaveData(
         completedOrder: KotCompletedOrder(
           id: 20,
           orderId: 'ORD-20',
-          tableId: tableId,
+          tableId: request.tableId,
           subtotal: 50,
           gst: 0,
           total: 50,

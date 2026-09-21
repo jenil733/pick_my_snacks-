@@ -1,8 +1,11 @@
 import 'dart:developer';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:pick_my_snacks/src/core/const/api_routes.dart';
 import 'package:pick_my_snacks/src/core/services/api_services.dart';
 import 'package:pick_my_snacks/src/data/model/get_saveorder.dart';
+import 'package:pick_my_snacks/src/data/model/kot_save_request.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_save_repository.dart';
 
 class KotSaveRepositoryImpl implements KotSaveRepository {
@@ -11,11 +14,18 @@ class KotSaveRepositoryImpl implements KotSaveRepository {
   final ApiService _apiService;
 
   @override
-  Future<KotSaveResponse> saveKot(int tableId) async {
-    final endpoint = ApiRoutes.kotSave(tableId);
-    log('POST $endpoint (table_id=$tableId)', name: 'KotSaveOrder');
-    final response = await _apiService.post(endpoint);
-    log('Response: $response', name: 'KotSaveOrder');
+  Future<KotSaveResponse> saveKot(KotSaveRequest request) async {
+    final endpoint = ApiRoutes.kotSave(request.tableId);
+    final fields = request.toFormFields();
+    debugPrint('[KotSaveOrder] API CALL: POST ${ApiRoutes.baseUrl}$endpoint');
+    debugPrint('[KotSaveOrder] FORM FIELDS: $fields');
+    log('POST $endpoint (table_id=${request.tableId})', name: 'KotSaveOrder');
+    final response = await _apiService.post(
+      endpoint,
+      data: FormData.fromMap(fields),
+    );
+    debugPrint('[KotSaveOrder] API RESPONSE: $response');
+    log('Response: $response', name: 'KotSaveOr0811der');
     final result = KotSaveResponse.fromJson(response);
     log(
       'Status: ${result.status}, message: ${result.message} ${result.data?.completedOrder?.products}',

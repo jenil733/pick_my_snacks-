@@ -5,6 +5,7 @@ import 'package:pick_my_snacks/src/data/model/get_delete.dart';
 import 'package:pick_my_snacks/src/data/model/get_saveorder.dart';
 import 'package:pick_my_snacks/src/data/model/get_table_status.dart';
 import 'package:pick_my_snacks/src/data/model/post_kot_model.dart';
+import 'package:pick_my_snacks/src/data/model/kot_save_request.dart';
 import 'package:pick_my_snacks/src/data/model/save_order.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_order_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_save_repository.dart';
@@ -20,6 +21,24 @@ void main() {
   test('builds a table-specific KOT completion endpoint', () {
     expect(ApiRoutes.kotSave(4), 'kot_save_order/4');
     expect(ApiRoutes.kotSave(9), 'kot_save_order/9');
+  });
+
+  test('builds the multipart KOT completion fields', () {
+    const request = KotSaveRequest(
+      tableId: 1,
+      staffId: 3,
+      paymentMode: 'cash',
+      productIds: <int>[1],
+      personId: 'P1-260918-1',
+    );
+
+    expect(request.toFormFields(), <String, dynamic>{
+      'table_id': 1,
+      'staff_id': 3,
+      'payment_mode': 'cash',
+      'person_id': 'P1-260918-1',
+      'products[0][product_id]': 1,
+    });
   });
 
   test('parses and completes the selected table KOT order', () async {
@@ -564,7 +583,8 @@ class _MultipleEmptyKotRepository implements KotSaveRepository {
   final emptyHoldIds = const <int>[82, 83, 84];
 
   @override
-  Future<KotSaveResponse> saveKot(int tableId) async {
+  Future<KotSaveResponse> saveKot(KotSaveRequest requestData) async {
+    final tableId = requestData.tableId;
     final request = RequestOptions(path: ApiRoutes.kotSave(tableId));
     if (callCount < emptyHoldIds.length) {
       final holdOrderId = emptyHoldIds[callCount++];
@@ -606,7 +626,8 @@ class _RepeatedEmptyKotRepository implements KotSaveRepository {
   int callCount = 0;
 
   @override
-  Future<KotSaveResponse> saveKot(int tableId) async {
+  Future<KotSaveResponse> saveKot(KotSaveRequest requestData) async {
+    final tableId = requestData.tableId;
     callCount++;
     final request = RequestOptions(path: ApiRoutes.kotSave(tableId));
     throw DioException(
@@ -650,7 +671,8 @@ class _MissingThenClosingKotRepository implements KotSaveRepository {
   int callCount = 0;
 
   @override
-  Future<KotSaveResponse> saveKot(int tableId) async {
+  Future<KotSaveResponse> saveKot(KotSaveRequest requestData) async {
+    final tableId = requestData.tableId;
     callCount++;
     if (callCount == 1) {
       final request = RequestOptions(path: ApiRoutes.kotSave(tableId));
@@ -696,7 +718,8 @@ class _FakeKotSaveRepository implements KotSaveRepository {
   final tableIds = <int>[];
 
   @override
-  Future<KotSaveResponse> saveKot(int tableId) async {
+  Future<KotSaveResponse> saveKot(KotSaveRequest requestData) async {
+    final tableId = requestData.tableId;
     tableIds.add(tableId);
     return response;
   }
@@ -738,7 +761,8 @@ class _RecoveringKotSaveRepository implements KotSaveRepository {
   int callCount = 0;
 
   @override
-  Future<KotSaveResponse> saveKot(int tableId) async {
+  Future<KotSaveResponse> saveKot(KotSaveRequest requestData) async {
+    final tableId = requestData.tableId;
     callCount++;
     if (callCount == 1) {
       final request = RequestOptions(path: ApiRoutes.kotSave(tableId));

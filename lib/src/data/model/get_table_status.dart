@@ -35,6 +35,7 @@ class TableStatusData {
     this.tableId,
     this.tableStatus,
     this.isOccupied,
+    this.personCount,
   });
 
   factory TableStatusData.fromJson(Map<String, dynamic> json) {
@@ -43,6 +44,7 @@ class TableStatusData {
       tableId: _toInt(json['table_id']),
       tableStatus: json['table_status']?.toString(),
       isOccupied: _toInt(json['is_occupied']),
+      personCount: _toInt(json['person_count']),
     );
   }
 
@@ -50,6 +52,7 @@ class TableStatusData {
   final int? tableId;
   final String? tableStatus;
   final int? isOccupied;
+  final int? personCount;
 
   bool get occupied {
     final normalized = tableStatus?.trim().toLowerCase();
@@ -87,6 +90,7 @@ class TableStatusData {
     'table_id': tableId,
     'table_status': tableStatus,
     'is_occupied': isOccupied,
+    'person_count': personCount,
   };
 }
 

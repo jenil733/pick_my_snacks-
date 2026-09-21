@@ -100,13 +100,14 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
                       ? widget.controller.kotStage.value == KotStage.tables
                             ? 'KOT Tables'
                             : widget.controller.kotStage.value ==
-                                  KotStage.details
+                                      KotStage.details ||
+                                  widget.controller.kotStage.value ==
+                                      KotStage.persons
                             ? 'Table ${widget.controller.selectedKotTableNumber.value}'
                             : 'Table ${widget.controller.activeTableNumber.value}'
                       : widget.controller.flow.value == PosFlow.takeAway
                       ? 'Take Away'
-                      : widget.controller.flow.value ==
-                              PosFlow.categoryBilling
+                      : widget.controller.flow.value == PosFlow.categoryBilling
                       ? 'Category Billing'
                       : 'Tablet billing',
                   style: const TextStyle(fontWeight: FontWeight.w700),
@@ -148,109 +149,37 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
             ),
             body: SafeArea(
               top: false,
-              child: Obx(
-                () {
-                  if (widget.controller.flow.value == PosFlow.kot &&
-                      widget.controller.kotStage.value != KotStage.order) {
-                    return KotTablesView(
-                      controller: widget.controller,
-                      onOpenOrder: () => setState(() => _selectedDetail = 0),
-                    );
-                  }
+              child: Obx(() {
+                if (widget.controller.flow.value == PosFlow.kot &&
+                    widget.controller.kotStage.value != KotStage.order) {
+                  return KotTablesView(
+                    controller: widget.controller,
+                    onOpenOrder: () => setState(() => _selectedDetail = 0),
+                  );
+                }
 
-                  if (widget.controller.flow.value == PosFlow.categoryBilling) {
-                    return Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 6,
-                            child: CategoryListPanel(
-                              controller: widget.controller,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            flex: 8,
-                            child: CategoryProductsPanel(
-                              controller: widget.controller,
-                              searchFocusNode: _searchFocusNode,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            flex: 9,
-                            child: Column(
-                              children: [
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: SegmentedButton<int>(
-                                    segments: [
-                                      ButtonSegment(
-                                        value: 0,
-                                        icon: const Icon(
-                                          Icons.shopping_cart_outlined,
-                                        ),
-                                        label: Obx(
-                                          () => Text(
-                                            'Cart (${widget.controller.itemCount})',
-                                          ),
-                                        ),
-                                      ),
-                                      const ButtonSegment(
-                                        value: 1,
-                                        icon: Icon(
-                                          Icons.receipt_long_outlined,
-                                        ),
-                                        label: Text('Billing'),
-                                      ),
-                                    ],
-                                    selected: {_selectedDetail},
-                                    showSelectedIcon: false,
-                                    onSelectionChanged: (selection) {
-                                      setState(
-                                        () =>
-                                            _selectedDetail = selection.first,
-                                      );
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Expanded(
-                                  child: IndexedStack(
-                                    index: _selectedDetail,
-                                    children: [
-                                      CartPanel(
-                                        controller: widget.controller,
-                                      ),
-                                      BillSummaryPanel(
-                                        controller: widget.controller,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
+                if (widget.controller.flow.value == PosFlow.categoryBilling) {
                   return Padding(
                     padding: const EdgeInsets.all(12),
                     child: Row(
                       children: [
                         Expanded(
-                          flex: 9,
-                          child: ProductsPanel(
+                          flex: 6,
+                          child: CategoryListPanel(
+                            controller: widget.controller,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 8,
+                          child: CategoryProductsPanel(
                             controller: widget.controller,
                             searchFocusNode: _searchFocusNode,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
-                          flex: 11,
+                          flex: 9,
                           child: Column(
                             children: [
                               SizedBox(
@@ -270,9 +199,7 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
                                     ),
                                     const ButtonSegment(
                                       value: 1,
-                                      icon: Icon(
-                                        Icons.receipt_long_outlined,
-                                      ),
+                                      icon: Icon(Icons.receipt_long_outlined),
                                       label: Text('Billing'),
                                     ),
                                   ],
@@ -280,8 +207,7 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
                                   showSelectedIcon: false,
                                   onSelectionChanged: (selection) {
                                     setState(
-                                      () =>
-                                          _selectedDetail = selection.first,
+                                      () => _selectedDetail = selection.first,
                                     );
                                   },
                                 ),
@@ -291,9 +217,7 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
                                 child: IndexedStack(
                                   index: _selectedDetail,
                                   children: [
-                                    CartPanel(
-                                      controller: widget.controller,
-                                    ),
+                                    CartPanel(controller: widget.controller),
                                     BillSummaryPanel(
                                       controller: widget.controller,
                                     ),
@@ -306,8 +230,73 @@ class _TabletHomeScreenState extends State<TabletHomeScreen> {
                       ],
                     ),
                   );
-                },
-              ),
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 9,
+                        child: ProductsPanel(
+                          controller: widget.controller,
+                          searchFocusNode: _searchFocusNode,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 11,
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: SegmentedButton<int>(
+                                segments: [
+                                  ButtonSegment(
+                                    value: 0,
+                                    icon: const Icon(
+                                      Icons.shopping_cart_outlined,
+                                    ),
+                                    label: Obx(
+                                      () => Text(
+                                        'Cart (${widget.controller.itemCount})',
+                                      ),
+                                    ),
+                                  ),
+                                  const ButtonSegment(
+                                    value: 1,
+                                    icon: Icon(Icons.receipt_long_outlined),
+                                    label: Text('Billing'),
+                                  ),
+                                ],
+                                selected: {_selectedDetail},
+                                showSelectedIcon: false,
+                                onSelectionChanged: (selection) {
+                                  setState(
+                                    () => _selectedDetail = selection.first,
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Expanded(
+                              child: IndexedStack(
+                                index: _selectedDetail,
+                                children: [
+                                  CartPanel(controller: widget.controller),
+                                  BillSummaryPanel(
+                                    controller: widget.controller,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
             ),
           ),
         ),

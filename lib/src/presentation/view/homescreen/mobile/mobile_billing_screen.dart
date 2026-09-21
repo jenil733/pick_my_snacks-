@@ -461,7 +461,7 @@ class MobileBillingScreen extends StatelessWidget {
                 : () => holdKotTable(context, controller),
             icon: const Icon(
               Icons.table_restaurant_outlined,
-              size: 19, 
+              size: 19,
               color: AppColors.yellowDark,
             ),
             label: Text(
@@ -485,10 +485,7 @@ class MobileBillingScreen extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed:
-                    (!controller.hasSelectedPendingKitchenItems &&
-                            !controller.hasKitchenOrderAwaitingPrint) ||
-                        controller.isSavingKotOrder.value
+                onPressed: controller.isSavingKotOrder.value
                     ? null
                     : () => sendKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),

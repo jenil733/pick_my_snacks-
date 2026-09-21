@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 import 'package:pick_my_snacks/src/core/const/api_routes.dart';
 import 'package:pick_my_snacks/src/data/model/post_kot_model.dart';
 import 'package:pick_my_snacks/src/data/model/remove_kot_quantity.dart';
@@ -7,20 +8,30 @@ import 'package:pick_my_snacks/src/domain/repository/remove_kot_quantity_reposit
 import 'package:pick_my_snacks/src/domain/usecase/remove_kot_quantity_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_order_usecase.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
+import 'package:pick_my_snacks/src/presentation/controller/homescreen/cart_controller.dart';
 
 void main() {
+  setUp(() {
+    Get.reset();
+    Get.put(CartController());
+  });
+
+  tearDown(Get.reset);
+
   test('builds the KOT quantity removal request', () {
     const request = RemoveKotQuantityRequest(
-      orderId: 12,
-      removeQuantity: 1,
-      detailId: 91,
+      orderId: 234,
+      personId: 'P1-260918-7',
+      removeQuantity: 0.5,
+      detailId: 265,
     );
 
     expect(ApiRoutes.rquantity, 'kot_hold_remove_quantity');
     expect(request.toFormFields(), {
-      'order_id': 12,
-      'detail_id': 91,
-      'remove_quantity': 1,
+      'order_id': 234,
+      'detail_id': 265,
+      'remove_quantity': 0.5,
+      'person_id': 'P1-260918-7',
     });
   });
 
@@ -65,7 +76,7 @@ void main() {
     expect(response.data?.order?.total, 189);
   });
 
-  test('controller removes one sent quantity from local state only', () async {
+  test('controller removes one sent quantity through the API', () async {
     final quantityRepository = _FakeRemoveKotQuantityRepository();
     final controller = HomeController(
       null,
@@ -90,16 +101,28 @@ void main() {
       image: '',
     );
     controller.takeKotTable(3, staffName: 'Arun');
+    controller.kotPersonBills[3] = <KotPersonBill>[
+      KotPersonBill(
+        personNumber: 1,
+        personId: 'P1-260918-7',
+        order: controller.tableOrders[3]!,
+      ),
+    ];
+    controller.activeKotPersonNumber.value = 1;
     controller.addProduct(product);
     controller.addProduct(product);
     expect(await controller.saveKitchenOrder(staffId: 7), isTrue);
 
     expect(await controller.decrement(controller.cart.single), isTrue);
 
-    expect(quantityRepository.requests, isEmpty);
+    expect(quantityRepository.requests, hasLength(1));
+    expect(quantityRepository.requests.single.orderId, 12);
+    expect(quantityRepository.requests.single.personId, 'P1-260918-7');
+    expect(quantityRepository.requests.single.detailId, 91);
+    expect(quantityRepository.requests.single.removeQuantity, 1);
     expect(controller.cart.single.quantity, 1);
-    expect(controller.backendSubtotal.value, isNull);
-    expect(controller.backendTotal.value, isNull);
+    expect(controller.backendSubtotal.value, 180);
+    expect(controller.backendTotal.value, 189);
     expect(controller.pendingKitchenItems, isEmpty);
   });
 }

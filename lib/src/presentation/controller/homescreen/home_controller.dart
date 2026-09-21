@@ -17,7 +17,11 @@ import 'package:pick_my_snacks/src/data/model/get_table_status.dart';
 import 'package:pick_my_snacks/src/data/model/get_saveorder.dart';
 import 'package:pick_my_snacks/src/data/model/processing.dart';
 import 'package:pick_my_snacks/src/data/model/post_kot_model.dart';
+import 'package:pick_my_snacks/src/data/model/kot_add_person.dart';
+import 'package:pick_my_snacks/src/data/model/kot_get_persons.dart';
+import 'package:pick_my_snacks/src/data/model/kot_save_request.dart';
 import 'package:pick_my_snacks/src/data/model/remove_kot_product.dart';
+import 'package:pick_my_snacks/src/data/model/remove_kot_quantity.dart';
 import 'package:pick_my_snacks/src/data/model/hold_order.dart';
 
 import 'package:pick_my_snacks/src/data/model/save_order.dart';
@@ -35,6 +39,9 @@ import 'package:pick_my_snacks/src/domain/usecase/get_take_away_processing_useca
 import 'package:pick_my_snacks/src/domain/usecase/get_table_status_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_processing_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_order_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/add_kot_person_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/delete_kot_person_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/get_kot_persons_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/delete_held_bill_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_hold_orders_usecase.dart';
@@ -262,7 +269,42 @@ class HeldBill {
 
 enum PosFlow { billing, categoryBilling, kot, takeAway }
 
-enum KotStage { tables, details, order }
+enum KotStage { tables, persons, details, order }
+
+class KotPersonBill {
+  const KotPersonBill({
+    required this.personNumber,
+    required this.order,
+    this.isConfirmed = false,
+    this.personId,
+  });
+
+  final int personNumber;
+  final KotTableOrder order;
+  final bool isConfirmed;
+  final String? personId;
+
+  int get itemCount => order.itemCount;
+  double get total => order.items.fold(0, (sum, item) => sum + item.total);
+
+  KotPersonBill copyWithOrder(KotTableOrder value) {
+    return KotPersonBill(
+      personNumber: personNumber,
+      order: value,
+      isConfirmed: isConfirmed,
+      personId: personId,
+    );
+  }
+
+  KotPersonBill copyWithConfirmed(bool value) {
+    return KotPersonBill(
+      personNumber: personNumber,
+      order: order,
+      isConfirmed: value,
+      personId: personId,
+    );
+  }
+}
 
 class KotTableOrder {
   const KotTableOrder({
@@ -328,6 +370,9 @@ class HomeController extends GetxController {
     this._getNotificationCountUseCase,
     this._getCategoriesUseCase,
     this._getCategoryProductsUseCase,
+    this._addKotPersonUseCase,
+    this._deleteKotPersonUseCase,
+    this._getKotPersonsUseCase,
   ]);
 
   final GetCategoryProductsUseCase? _getCategoryProductsUseCase;
@@ -369,6 +414,9 @@ class HomeController extends GetxController {
   final GetTableStatusUseCase? _getTableStatusUseCase;
   final GetProcessingOrderUseCase? _getProcessingOrderUseCase;
   final SaveKotOrderUseCase? _saveKotOrderUseCase;
+  final AddKotPersonUseCase? _addKotPersonUseCase;
+  final DeleteKotPersonUseCase? _deleteKotPersonUseCase;
+  final GetKotPersonsUseCase? _getKotPersonsUseCase;
   final SaveKotUseCase? _saveKotUseCase;
   final RemoveKotProductUseCase? _removeKotProductUseCase;
   // ignore: unused_field
@@ -405,9 +453,14 @@ class HomeController extends GetxController {
   final isSavingOrder = false.obs;
   final isSavingKotOrder = false.obs;
   final isHoldingKotTable = false.obs;
+  final isAddingKotPerson = false.obs;
+  final isLoadingKotPersons = false.obs;
   RxBool get isSyncingTotals => _cartController.isSyncingTotals;
   final saveOrderError = RxnString();
   final kotOrderError = RxnString();
+  final kotAddPersonError = RxnString();
+  final kotDeletePersonError = RxnString();
+  final kotGetPersonsError = RxnString();
   final lastKotOrder = Rxn<KotOrderData>();
   final lastKitchenOrderItems = <CartItem>[].obs;
   final kitchenSelectedItems = <CartItem>{}.obs;
@@ -466,6 +519,8 @@ class HomeController extends GetxController {
   final kotStage = KotStage.tables.obs;
   final activeTableNumber = RxnInt();
   final selectedKotTableNumber = RxnInt();
+  final activeKotPersonNumber = RxnInt();
+  final kotPersonBills = <int, List<KotPersonBill>>{}.obs;
   final tableOrders = <int, KotTableOrder>{}.obs;
   final submittedKitchenTables = <int>{}.obs;
   final deletedKitchenTables = <int>{}.obs;
@@ -489,6 +544,7 @@ class HomeController extends GetxController {
   final Set<int> _deletedHeldOrderIds = <int>{};
   final Map<int, List<CartItem>> _heldItemSnapshots = <int, List<CartItem>>{};
   final Map<int, Map<String, int>> _kitchenSentQuantities = {};
+  final Map<String, Set<String>> _kotKitchenSelections = {};
   final Map<String, int> _takeAwaySentQuantities = {};
   final Map<int, Set<int>> _kotHoldOrderIds = {};
   final Set<int> _kotOrdersNeedingReconciliation = <int>{};
@@ -593,11 +649,13 @@ class HomeController extends GetxController {
     final existingOrder = tableOrders[tableNumber];
     if (existingOrder != null && existingOrder.itemCount > 0) return;
     tableOrders.remove(tableNumber);
+    kotPersonBills.remove(tableNumber);
     submittedKitchenTables.remove(tableNumber);
     deletedKitchenTables.remove(tableNumber);
     _kitchenSentQuantities.remove(tableNumber);
     _kotHoldOrderIds.remove(tableNumber);
     _kotOrdersNeedingReconciliation.remove(tableNumber);
+    _clearKotKitchenSelections(tableNumber);
     lastKitchenOrderItems.clear();
     kitchenOrderAwaitingPrint.value = false;
     kitchenOrderAwaitingPrintTable.value = null;
@@ -618,6 +676,564 @@ class HomeController extends GetxController {
     processingOrder.value = null;
     flow.value = PosFlow.kot;
     kotStage.value = KotStage.order;
+    _restoreKotKitchenSelection(tableNumber);
+  }
+
+  Future<void> showKotPersons(int tableNumber) async {
+    final previousTableNumber = activeTableNumber.value;
+    final previousPersonNumber = activeKotPersonNumber.value;
+    _syncActiveTableOrder();
+    if (previousTableNumber != null && previousPersonNumber != null) {
+      _removeUnconfirmedKotPerson(previousTableNumber, previousPersonNumber);
+    }
+    activeTableNumber.value = null;
+    activeKotPersonNumber.value = null;
+    startNewBill();
+    selectedKotTableNumber.value = tableNumber;
+    processingOrder.value = processingOrders[tableNumber];
+    processingOrderError.value = null;
+    flow.value = PosFlow.kot;
+    kotStage.value = KotStage.persons;
+
+    final existingOrder = tableOrders[tableNumber];
+    if (existingOrder != null &&
+        (kotPersonBills[tableNumber]?.isEmpty ?? true)) {
+      kotPersonBills[tableNumber] = <KotPersonBill>[
+        KotPersonBill(
+          personNumber: 1,
+          order: existingOrder,
+          isConfirmed: submittedKitchenTables.contains(tableNumber),
+        ),
+      ];
+    }
+
+    if (tableStatuses[tableNumber]?.occupied == true &&
+        processingOrder.value == null) {
+      await getProcessingOrder(tableNumber);
+    }
+    await getKotPersons(tableNumber);
+  }
+
+  Future<void> getKotPersons(int tableNumber) async {
+    final useCase = _getKotPersonsUseCase;
+    if (useCase == null) {
+      _seedRemoteKotPersons(tableNumber);
+      return;
+    }
+    isLoadingKotPersons.value = true;
+    kotGetPersonsError.value = null;
+    try {
+      final response = await useCase(tableNumber);
+      debugPrint(
+        '[KotGetPersons] Parsed response: status=${response.status}, '
+        'persons=${response.persons.length}, message=${response.message}',
+      );
+      if (response.status == false) {
+        kotGetPersonsError.value =
+            response.message ?? 'Unable to load persons for this table.';
+        _seedRemoteKotPersons(tableNumber);
+        return;
+      }
+      _seedRemoteKotPersons(tableNumber, remotePersons: response.persons);
+    } on DioException catch (error) {
+      kotGetPersonsError.value = _saveOrderApiError(error);
+      debugPrint('[KotGetPersons] API ERROR: ${kotGetPersonsError.value}');
+      _seedRemoteKotPersons(tableNumber);
+    } catch (error) {
+      kotGetPersonsError.value =
+          'Unable to load persons for this table. Please try again.';
+      debugPrint('[KotGetPersons] UNEXPECTED ERROR: $error');
+      _seedRemoteKotPersons(tableNumber);
+    } finally {
+      isLoadingKotPersons.value = false;
+    }
+  }
+
+  Future<int?> addKotPerson({required String staffName, int? staffId}) async {
+    final tableNumber = selectedKotTableNumber.value;
+    debugPrint(
+      '[KotAddPerson] Controller called: table=$tableNumber, '
+      'staff=$staffId, payment=${paymentMethod.value}',
+    );
+    if (tableNumber == null) {
+      kotAddPersonError.value = 'Please select a table.';
+      debugPrint('[KotAddPerson] STOPPED: no table selected');
+      return null;
+    }
+    final useCase = _addKotPersonUseCase;
+    debugPrint('[KotAddPerson] API service registered: ${useCase != null}');
+    String? personId;
+    if (useCase != null) {
+      if (staffId == null) {
+        kotAddPersonError.value = 'Please select a staff member.';
+        debugPrint('[KotAddPerson] STOPPED: no staff selected');
+        return null;
+      }
+      if (isAddingKotPerson.value) {
+        debugPrint('[KotAddPerson] STOPPED: request already in progress');
+        return null;
+      }
+      isAddingKotPerson.value = true;
+      kotAddPersonError.value = null;
+      try {
+        final response = await useCase(
+          KotAddPersonRequest(
+            tableId: tableNumber,
+            staffId: staffId,
+            paymentMode: paymentMethod.value,
+          ),
+        );
+        personId = response.personId;
+        debugPrint(
+          '[KotAddPerson] Parsed response: status=${response.status}, '
+          'personId=$personId, message=${response.message}',
+        );
+        if (response.status == false || personId == null) {
+          kotAddPersonError.value =
+              response.message ?? 'Unable to create a person for this table.';
+          return null;
+        }
+      } on DioException catch (error) {
+        kotAddPersonError.value = _saveOrderApiError(error);
+        debugPrint('[KotAddPerson] DioException: ${kotAddPersonError.value}');
+        return null;
+      } catch (error) {
+        kotAddPersonError.value =
+            'Unable to create a person for this table. Please try again.';
+        debugPrint('[KotAddPerson] Unexpected error: $error');
+        return null;
+      } finally {
+        isAddingKotPerson.value = false;
+      }
+    } else {
+      debugPrint(
+        '[KotAddPerson] WARNING: API service is unavailable; using local mode',
+      );
+    }
+    final bills = List<KotPersonBill>.from(
+      kotPersonBills[tableNumber] ?? const <KotPersonBill>[],
+    );
+    final nextPerson = bills.isEmpty
+        ? 1
+        : bills
+                  .map((bill) => bill.personNumber)
+                  .reduce((a, b) => a > b ? a : b) +
+              1;
+    bills.add(
+      KotPersonBill(
+        personNumber: nextPerson,
+        personId: personId,
+        order: KotTableOrder(
+          tableNumber: tableNumber,
+          staffName: staffName.trim().isEmpty ? 'Staff' : staffName.trim(),
+          staffId: staffId,
+          openedAt: DateTime.now(),
+          items: const <CartItem>[],
+        ),
+      ),
+    );
+    kotPersonBills[tableNumber] = bills;
+    debugPrint(
+      '[KotAddPerson] SUCCESS: personNumber=$nextPerson, personId=$personId',
+    );
+    return nextPerson;
+  }
+
+  Future<bool> deleteKotPerson(int personNumber) async {
+    final tableNumber = selectedKotTableNumber.value;
+    if (tableNumber == null) {
+      kotDeletePersonError.value = 'Please select a table.';
+      debugPrint('[KotPersonDelete] STOPPED: no table selected');
+      return false;
+    }
+    final bills = List<KotPersonBill>.from(
+      kotPersonBills[tableNumber] ?? const <KotPersonBill>[],
+    );
+    final deletingBill = bills.firstWhereOrNull(
+      (bill) => bill.personNumber == personNumber,
+    );
+    if (deletingBill == null) {
+      debugPrint(
+        '[KotPersonDelete] STOPPED: Person $personNumber was not found '
+        'in local Table $tableNumber data',
+      );
+      return false;
+    }
+    debugPrint(
+      '[KotPersonDelete] THREE-DOT DELETE clicked: table=$tableNumber, '
+      'personNumber=$personNumber, personId=${deletingBill.personId}, '
+      'confirmed=${deletingBill.isConfirmed}, '
+      'itemCount=${deletingBill.itemCount}',
+    );
+    for (final item in deletingBill.order.items) {
+      final references = item.kotProductReferences
+          .map(
+            (reference) =>
+                'orderId=${reference.orderId},detailId=${reference.detailId}',
+          )
+          .join('; ');
+      debugPrint(
+        '[KotPersonDelete] LOCAL ITEM: productId=${item.product.id}, '
+        'name=${item.product.name}, quantity=${item.orderQuantity}, '
+        'kotReferences=[$references]',
+      );
+    }
+    debugPrint('[KotPersonDelete] Preparing backend delete request.');
+    final useCase = _deleteKotPersonUseCase;
+    final personId = deletingBill.personId?.trim();
+    if (useCase != null) {
+      if (personId == null || personId.isEmpty) {
+        kotDeletePersonError.value =
+            'This person has no backend person ID and cannot be deleted.';
+        debugPrint('[KotPersonDelete] STOPPED: missing backend person ID');
+        return false;
+      }
+      kotDeletePersonError.value = null;
+      try {
+        final response = await useCase(tableNumber, personId);
+        if (response.status == false) {
+          kotDeletePersonError.value =
+              response.message ?? 'Unable to delete this person.';
+          debugPrint(
+            '[KotPersonDelete] API REJECTED: ${kotDeletePersonError.value}',
+          );
+          return false;
+        }
+      } on DioException catch (error) {
+        kotDeletePersonError.value = _saveOrderApiError(error);
+        debugPrint(
+          '[KotPersonDelete] API ERROR: ${kotDeletePersonError.value}',
+        );
+        return false;
+      } catch (error) {
+        kotDeletePersonError.value =
+            'Unable to delete this person. Please try again.';
+        debugPrint('[KotPersonDelete] UNEXPECTED ERROR: $error');
+        return false;
+      }
+    } else {
+      debugPrint(
+        '[KotPersonDelete] WARNING: delete API unavailable; using local mode',
+      );
+    }
+    bills.removeWhere((bill) => bill.personNumber == personNumber);
+    if (bills.isEmpty) {
+      kotPersonBills.remove(tableNumber);
+      tableOrders.remove(tableNumber);
+      submittedKitchenTables.remove(tableNumber);
+      processingOrders.remove(tableNumber);
+      tableStatuses.remove(tableNumber);
+      _kitchenSentQuantities.remove(tableNumber);
+      _kotHoldOrderIds.remove(tableNumber);
+      debugPrint(
+        '[KotPersonDelete] LOCAL RESULT: Table $tableNumber has no local '
+        'persons. ${useCase == null ? 'Backend was not called.' : 'Backend delete was confirmed.'}',
+      );
+      return true;
+    }
+    kotPersonBills[tableNumber] = bills;
+    tableOrders[tableNumber] = bills.first.order;
+    debugPrint(
+      '[KotPersonDelete] LOCAL RESULT: remaining persons for Table '
+      '$tableNumber = ${bills.map((bill) => '${bill.personNumber}:${bill.personId}').join(', ')}',
+    );
+    return true;
+  }
+
+  void openKotPersonBill(int personNumber) {
+    final tableNumber = selectedKotTableNumber.value;
+    if (tableNumber == null) return;
+    final bill = kotPersonBills[tableNumber]?.firstWhereOrNull(
+      (entry) => entry.personNumber == personNumber,
+    );
+    if (bill == null) return;
+
+    _syncActiveTableOrder();
+    startNewBill();
+    cart.assignAll(bill.order.items.map((item) => item.copy()));
+    tableOrders[tableNumber] = bill.order;
+    activeTableNumber.value = tableNumber;
+    activeKotPersonNumber.value = personNumber;
+    selectedKotTableNumber.value = null;
+    processingOrder.value = null;
+    _useKotTableStaff(
+      staffId: bill.order.staffId,
+      staffName: bill.order.staffName,
+    );
+    flow.value = PosFlow.kot;
+    kotStage.value = KotStage.order;
+    _restoreKotKitchenSelection(tableNumber, personNumber: personNumber);
+  }
+
+  Product _resolveProduct({
+    required int? productId,
+    required String? productCode,
+    required String? productName,
+    required double? price,
+    required String? unit,
+  }) {
+    if (productId != null && productId > 0) {
+      final found = products.firstWhereOrNull((p) => p.id == productId);
+      if (found != null) return found;
+    }
+    final code = productCode?.trim();
+    if (code != null && code.isNotEmpty) {
+      final found = products.firstWhereOrNull(
+        (p) => p.productId.trim().toLowerCase() == code.toLowerCase(),
+      );
+      if (found != null) return found;
+    }
+    final name = productName?.trim();
+    if (name != null && name.isNotEmpty) {
+      final found = products.firstWhereOrNull(
+        (p) => p.name.trim().toLowerCase() == name.toLowerCase(),
+      );
+      if (found != null) return found;
+    }
+    return Product(
+      id: productId ?? 0,
+      productId: code ?? '',
+      name: name?.isNotEmpty == true ? name! : 'Unnamed product',
+      unit: unit ?? '',
+      price: price ?? 0,
+      image: '',
+    );
+  }
+
+  void _seedRemoteKotPersons(
+    int tableNumber, {
+    List<KotPersonData> remotePersons = const <KotPersonData>[],
+  }) {
+    if (remotePersons.isNotEmpty) {
+      final currentBills = List<KotPersonBill>.from(
+        kotPersonBills[tableNumber] ?? const <KotPersonBill>[],
+      );
+      final remoteOrder = processingOrder.value?.order;
+      final products = remoteOrder?.products ?? const <ProcessingProduct>[];
+      final processingGroups = <int, List<ProcessingProduct>>{};
+      for (final product in products) {
+        final orderId = product.holdOrderId;
+        if (orderId != null) {
+          processingGroups
+              .putIfAbsent(orderId, () => <ProcessingProduct>[])
+              .add(product);
+        }
+      }
+      final canMatchGroupsByPosition =
+          processingGroups.length == remotePersons.length;
+      final bills = remotePersons
+          .asMap()
+          .entries
+          .map((entry) {
+            final personIndex = entry.key;
+            final person = entry.value;
+            final existing = currentBills.firstWhereOrNull(
+              (bill) =>
+                  bill.personId == person.personId ||
+                  bill.personNumber == person.personNumber,
+            );
+            var personProducts = person.products;
+            if (personProducts.isEmpty) {
+              personProducts = products
+                  .where((product) => product.personId == person.personId)
+                  .toList(growable: false);
+            }
+            if (personProducts.isEmpty && person.holdOrderIds.isNotEmpty) {
+              final orderIds = person.holdOrderIds.toSet();
+              personProducts = products
+                  .where((product) => orderIds.contains(product.holdOrderId))
+                  .toList(growable: false);
+            }
+            if (personProducts.isEmpty && remotePersons.length == 1) {
+              personProducts = products;
+            }
+            if (personProducts.isEmpty && canMatchGroupsByPosition) {
+              personProducts = processingGroups.values.elementAt(personIndex);
+            }
+            final remoteItemsMap = <String, CartItem>{};
+            for (final item in personProducts) {
+              final resolvedProduct = _resolveProduct(
+                productId: item.productId,
+                productCode: item.productCode,
+                productName: item.productName,
+                price: item.price ?? item.mrp,
+                unit: item.unit,
+              );
+              final key = resolvedProduct.id > 0
+                  ? 'id:${resolvedProduct.id}'
+                  : resolvedProduct.productId.isNotEmpty
+                      ? 'code:${resolvedProduct.productId}'
+                      : 'name:${resolvedProduct.name.toLowerCase()}';
+
+              final ref = KotProductReference(
+                orderId: item.holdOrderId ?? remoteOrder?.id ?? 0,
+                detailId: item.id,
+              );
+              final itemQty = item.quantity ?? 1;
+
+              if (remoteItemsMap.containsKey(key)) {
+                final existingCartItem = remoteItemsMap[key]!;
+                existingCartItem.quantity += itemQty;
+                existingCartItem.kotProductReferences.add(ref);
+              } else {
+                remoteItemsMap[key] = CartItem(
+                  product: resolvedProduct,
+                  quantity: itemQty,
+                  kotProductReferences: <KotProductReference>[ref],
+                );
+              }
+            }
+
+            final remoteItems = remoteItemsMap.values.toList();
+            for (final rItem in remoteItems) {
+              if (existing != null) {
+                final existingMatch = existing.order.items.firstWhereOrNull(
+                  (localItem) =>
+                      (rItem.product.id > 0 &&
+                          localItem.product.id == rItem.product.id) ||
+                      (rItem.product.productId.isNotEmpty &&
+                          localItem.product.productId ==
+                              rItem.product.productId) ||
+                      localItem.product.name.toLowerCase() ==
+                          rItem.product.name.toLowerCase(),
+                );
+                if (existingMatch != null &&
+                    existingMatch.quantity > rItem.quantity) {
+                  rItem.quantity = existingMatch.quantity;
+                }
+              }
+            }
+
+            final localDraftItems = <CartItem>[];
+            if (existing != null) {
+              for (final localItem in existing.order.items) {
+                final matchesRemote = remoteItems.any(
+                  (rItem) =>
+                      (rItem.product.id > 0 &&
+                          rItem.product.id == localItem.product.id) ||
+                      (rItem.product.productId.isNotEmpty &&
+                          rItem.product.productId ==
+                              localItem.product.productId) ||
+                      rItem.product.name.toLowerCase() ==
+                          localItem.product.name.toLowerCase(),
+                );
+                if (!matchesRemote && localItem.kotProductReferences.isEmpty) {
+                  localDraftItems.add(localItem.copy());
+                }
+              }
+            }
+
+            final items = <CartItem>[...remoteItems, ...localDraftItems];
+            final order = personProducts.isEmpty && existing != null
+                ? existing.order
+                : KotTableOrder(
+                    tableNumber: tableNumber,
+                    staffName: remoteOrder?.staffName?.trim().isNotEmpty == true
+                        ? remoteOrder!.staffName!.trim()
+                        : existing?.order.staffName ?? 'Staff',
+                    staffId: remoteOrder?.staffId ?? existing?.order.staffId,
+                    openedAt:
+                        DateTime.tryParse(remoteOrder?.createdAt ?? '') ??
+                        existing?.order.openedAt ??
+                        DateTime.now(),
+                    items: items,
+                  );
+            return KotPersonBill(
+              personNumber: person.personNumber,
+              personId: person.personId,
+              isConfirmed: true,
+              order: order,
+            );
+          })
+          .toList(growable: false);
+      kotPersonBills[tableNumber] = bills;
+      debugPrint(
+        '[KotGetPersons] Restored Table $tableNumber persons: '
+        '${bills.map((bill) => '${bill.personId}=${bill.itemCount} items').join(', ')}',
+      );
+      if (bills.isNotEmpty) tableOrders[tableNumber] = bills.first.order;
+      return;
+    }
+    if (kotPersonBills[tableNumber]?.isNotEmpty == true) return;
+    final remoteOrder = processingOrder.value?.order;
+    if (remoteOrder == null) return;
+    final products = remoteOrder.products ?? const <ProcessingProduct>[];
+    final grouped = <int, List<ProcessingProduct>>{};
+    for (final product in products) {
+      final key = product.holdOrderId ?? remoteOrder.id ?? 0;
+      grouped.putIfAbsent(key, () => <ProcessingProduct>[]).add(product);
+    }
+    if (grouped.isEmpty) grouped[remoteOrder.id ?? 0] = const [];
+
+    var personNumber = 0;
+    final bills = grouped.entries.map((entry) {
+      personNumber++;
+      final items = entry.value.map((item) {
+        final resolvedProduct = _resolveProduct(
+          productId: item.productId,
+          productCode: item.productCode,
+          productName: item.productName,
+          price: item.price ?? item.mrp,
+          unit: item.unit,
+        );
+        return CartItem(
+          product: resolvedProduct,
+          quantity: item.quantity ?? 1,
+          kotProductReferences: <KotProductReference>[
+            KotProductReference(
+              orderId: item.holdOrderId ?? remoteOrder.id ?? entry.key,
+              detailId: item.id,
+            ),
+          ],
+        );
+      }).toList();
+      return KotPersonBill(
+        personNumber: personNumber,
+        personId: entry.value.isEmpty ? null : entry.value.first.personId,
+        isConfirmed: true,
+        order: KotTableOrder(
+          tableNumber: tableNumber,
+          staffName: remoteOrder.staffName?.trim().isNotEmpty == true
+              ? remoteOrder.staffName!.trim()
+              : 'Staff',
+          staffId: remoteOrder.staffId,
+          openedAt:
+              DateTime.tryParse(remoteOrder.createdAt ?? '') ?? DateTime.now(),
+          items: items,
+        ),
+      );
+    }).toList();
+    kotPersonBills[tableNumber] = bills;
+  }
+
+  void _confirmActiveKotPerson() {
+    final tableNumber = activeTableNumber.value;
+    final personNumber = activeKotPersonNumber.value;
+    if (tableNumber == null || personNumber == null) return;
+    _syncActiveTableOrder();
+    final bills = List<KotPersonBill>.from(
+      kotPersonBills[tableNumber] ?? const <KotPersonBill>[],
+    );
+    final index = bills.indexWhere((bill) => bill.personNumber == personNumber);
+    if (index < 0) return;
+    bills[index] = bills[index].copyWithConfirmed(true);
+    kotPersonBills[tableNumber] = bills;
+  }
+
+  void _removeUnconfirmedKotPerson(int tableNumber, int personNumber) {
+    final bills = List<KotPersonBill>.from(
+      kotPersonBills[tableNumber] ?? const <KotPersonBill>[],
+    );
+    final index = bills.indexWhere((bill) => bill.personNumber == personNumber);
+    if (index < 0 || bills[index].isConfirmed) return;
+    bills.removeAt(index);
+    if (bills.isEmpty) {
+      kotPersonBills.remove(tableNumber);
+      tableOrders.remove(tableNumber);
+    } else {
+      kotPersonBills[tableNumber] = bills;
+      tableOrders[tableNumber] = bills.first.order;
+    }
   }
 
   void continueKotTable(int tableNumber) {
@@ -633,6 +1249,7 @@ class HomeController extends GetxController {
     processingOrder.value = null;
     flow.value = PosFlow.kot;
     kotStage.value = KotStage.order;
+    _restoreKotKitchenSelection(tableNumber);
   }
 
   void showKotTables() {
@@ -645,6 +1262,7 @@ class HomeController extends GetxController {
       activeTableNumber.value = null;
     }
     selectedKotTableNumber.value = null;
+    activeKotPersonNumber.value = null;
     processingOrder.value = null;
     processingOrderError.value = null;
     kotStage.value = KotStage.tables;
@@ -692,6 +1310,7 @@ class HomeController extends GetxController {
     final tableNumber = activeTableNumber.value;
     if (tableNumber != null) {
       tableOrders.remove(tableNumber);
+      kotPersonBills.remove(tableNumber);
       submittedKitchenTables.remove(tableNumber);
       _kitchenSentQuantities.remove(tableNumber);
       _kotHoldOrderIds.remove(tableNumber);
@@ -712,9 +1331,62 @@ class HomeController extends GetxController {
     if (tableNumber == null) return;
     final order = tableOrders[tableNumber];
     if (order == null) return;
-    tableOrders[tableNumber] = order.copyWithItems(
+    _saveKotKitchenSelection(
+      tableNumber,
+      personNumber: activeKotPersonNumber.value,
+    );
+    final updatedOrder = order.copyWithItems(
       cart.map((item) => item.copy()).toList(),
     );
+    tableOrders[tableNumber] = updatedOrder;
+    final personNumber = activeKotPersonNumber.value;
+    if (personNumber == null) return;
+    final bills = List<KotPersonBill>.from(
+      kotPersonBills[tableNumber] ?? const <KotPersonBill>[],
+    );
+    final index = bills.indexWhere((bill) => bill.personNumber == personNumber);
+    if (index < 0) return;
+    bills[index] = bills[index].copyWithOrder(updatedOrder);
+    kotPersonBills[tableNumber] = bills;
+  }
+
+  String _kotKitchenSelectionKey(int tableNumber, int? personNumber) =>
+      '$tableNumber:${personNumber ?? 0}';
+
+  void _saveKotKitchenSelection(int tableNumber, {int? personNumber}) {
+    final selectedIds = kitchenSelectedItems
+        .map((item) => item.uniqueId)
+        .toSet();
+    final key = _kotKitchenSelectionKey(tableNumber, personNumber);
+    if (selectedIds.isEmpty) {
+      _kotKitchenSelections.remove(key);
+    } else {
+      _kotKitchenSelections[key] = selectedIds;
+    }
+  }
+
+  void _restoreKotKitchenSelection(int tableNumber, {int? personNumber}) {
+    final selectedIds =
+        _kotKitchenSelections[_kotKitchenSelectionKey(
+          tableNumber,
+          personNumber,
+        )] ??
+        (personNumber == null
+            ? null
+            : _kotKitchenSelections[_kotKitchenSelectionKey(
+                tableNumber,
+                null,
+              )]);
+    kitchenSelectedItems.assignAll(
+      selectedIds == null
+          ? const <CartItem>[]
+          : cart.where((item) => selectedIds.contains(item.uniqueId)),
+    );
+  }
+
+  void _clearKotKitchenSelections(int tableNumber) {
+    final prefix = '$tableNumber:';
+    _kotKitchenSelections.removeWhere((key, _) => key.startsWith(prefix));
   }
 
   Future<void> getTables() async {
@@ -762,7 +1434,13 @@ class HomeController extends GetxController {
       tableStatusError.value = null;
     }
     try {
-      final response = await useCase();
+      final selectedStaffId = Get.isRegistered<StaffController>()
+          ? Get.find<StaffController>().selectedStaff.value?.id
+          : null;
+      final response = await useCase(
+        staffId: selectedStaffId,
+        paymentMode: paymentMethod.value,
+      );
       if (response.status == false) {
         if (!silent) {
           tableStatuses.clear();
@@ -781,6 +1459,24 @@ class HomeController extends GetxController {
         final tableId = status.tableId;
         if (tableId == null) continue;
         statuses[tableId] = status;
+        deletedKitchenTables.remove(tableId);
+      }
+      // `get_kot_tables` is the reliable cold-start source for person_count.
+      // Some backend table-status responses can temporarily say "free" even
+      // while saved person bills still exist. Keep those tables occupied so
+      // their processing orders and persons are restored on a fresh install.
+      for (final table in tables) {
+        final tableId = table.displayNumber;
+        final personCount = table.personCount ?? 0;
+        if (tableId == null || personCount <= 0) continue;
+        final status = statuses[tableId];
+        statuses[tableId] = TableStatusData(
+          id: status?.id ?? table.id,
+          tableId: tableId,
+          tableStatus: 'occupied',
+          isOccupied: 1,
+          personCount: personCount,
+        );
         deletedKitchenTables.remove(tableId);
       }
       tableStatuses.assignAll(statuses);
@@ -810,6 +1506,7 @@ class HomeController extends GetxController {
 
       final selectedTable = selectedKotTableNumber.value;
       if (selectedTable != null &&
+          kotStage.value != KotStage.persons &&
           !occupiedTableNumbers.contains(selectedTable) &&
           !submittedKitchenTables.contains(selectedTable)) {
         selectedKotTableNumber.value = null;
@@ -855,12 +1552,32 @@ class HomeController extends GetxController {
     if (tableNumbers.isEmpty) return;
     final currentTable = activeTableNumber.value;
     final selectedTable = selectedKotTableNumber.value;
-    final currentScreenWasClosed =
-        (currentTable != null && tableNumbers.contains(currentTable)) ||
-        (selectedTable != null && tableNumbers.contains(selectedTable));
+    final activeTableHasLocalDrafts =
+        currentTable != null &&
+        tableNumbers.contains(currentTable) &&
+        cart.any((item) => item.kotProductReferences.isEmpty);
+    final tablesToClear = activeTableHasLocalDrafts
+        ? tableNumbers.difference(<int>{currentTable})
+        : tableNumbers;
 
-    for (final tableId in tableNumbers) {
+    if (activeTableHasLocalDrafts) {
+      // Removing the last kitchen-saved product makes the backend temporarily
+      // report the table as free. The active cart can still contain products
+      // that have not been sent to the kitchen, so it must remain open.
+      _syncActiveTableOrder();
+      debugPrint(
+        '[KotTableStatus] Preserving Table $currentTable because it still has '
+        '${cart.where((item) => item.kotProductReferences.isEmpty).length} '
+        'unsent local product(s).',
+      );
+    }
+    final currentScreenWasClosed =
+        (currentTable != null && tablesToClear.contains(currentTable)) ||
+        (selectedTable != null && tablesToClear.contains(selectedTable));
+
+    for (final tableId in tablesToClear) {
       tableOrders.remove(tableId);
+      kotPersonBills.remove(tableId);
       tableStatuses.remove(tableId);
       processingOrders.remove(tableId);
       submittedKitchenTables.remove(tableId);
@@ -967,7 +1684,7 @@ class HomeController extends GetxController {
     try {
       final closeUseCase = _saveKotUseCase;
       if (closeUseCase != null) {
-        final response = await closeUseCase(tableId);
+        final response = await closeUseCase(KotSaveRequest(tableId: tableId));
         if (response.status == false) {
           if (_isMissingHoldBill(response.message)) {
             _clearEmptyKotTable(tableId);
@@ -1013,6 +1730,7 @@ class HomeController extends GetxController {
 
   void _clearEmptyKotTable(int tableId) {
     tableOrders.remove(tableId);
+    kotPersonBills.remove(tableId);
     tableStatuses.remove(tableId);
     processingOrders.remove(tableId);
     submittedKitchenTables.remove(tableId);
@@ -2152,6 +2870,7 @@ class HomeController extends GetxController {
     bool selectedOnly = false,
     bool prepareForKitchenPrint = true,
     bool markAsKitchen = true,
+    bool printKitchen = true,
   }) async {
     final useCase = _saveKotOrderUseCase;
     if (useCase == null) {
@@ -2178,22 +2897,37 @@ class HomeController extends GetxController {
     final pendingItems = selectedOnly
         ? selectedPendingKitchenItems
         : pendingKitchenItems;
+    final kitchenItems = markAsKitchen
+        ? pendingItems
+        : pendingItems
+              .where(
+                (item) => kitchenSelectedItems.any(
+                  (selected) => selected.uniqueId == item.uniqueId,
+                ),
+              )
+              .toList(growable: false);
     if (pendingItems.isEmpty) {
       if (awaitingPrintItems.isNotEmpty) return true;
-      kotOrderError.value = selectedOnly
-          ? 'Select at least one new product to send.'
-          : 'No new kitchen items to send.';
-      return false;
+      kotOrderError.value = null;
+      return true;
     }
-
     isSavingKotOrder.value = true;
     kotOrderError.value = null;
     try {
+      final activePersonNumber = activeKotPersonNumber.value;
+      final personId = activePersonNumber == null
+          ? null
+          : kotPersonBills[tableId]
+                ?.firstWhereOrNull(
+                  (bill) => bill.personNumber == activePersonNumber,
+                )
+                ?.personId;
       final response = await useCase(
         KotOrderRequest(
           tableId: tableId,
           staffId: staffId,
           paymentMode: paymentMethod.value,
+          personId: personId,
           discountType: discountType.value,
           discountValue: discountValue.value,
           offer: discountOffer.value,
@@ -2203,7 +2937,7 @@ class HomeController extends GetxController {
           customerName: takeAwayCustomerName.value,
           customerPhone: takeAwayCustomerPhone.value,
           isKot: markAsKitchen,
-          printKitchen: prepareForKitchenPrint,
+          printKitchen: printKitchen,
           products: pendingItems
               .map(
                 (item) => SaveOrderProductRequest(
@@ -2285,7 +3019,7 @@ class HomeController extends GetxController {
       if (prepareForKitchenPrint) {
         lastKitchenOrderItems.assignAll(<CartItem>[
           ...awaitingPrintItems,
-          ...pendingItems.map((item) => item.copy()),
+          ...kitchenItems.map((item) => item.copy()),
         ]);
         kitchenOrderAwaitingPrint.value = true;
         kitchenOrderAwaitingPrintTable.value = tableId;
@@ -2294,6 +3028,7 @@ class HomeController extends GetxController {
         kitchenOrderAwaitingPrint.value = false;
         kitchenOrderAwaitingPrintTable.value = null;
       }
+      _confirmActiveKotPerson();
       return true;
     } on DioException catch (error) {
       kotOrderError.value = _saveOrderApiError(error);
@@ -2508,7 +3243,7 @@ class HomeController extends GetxController {
   List<CartItem> get takeAwayPendingKitchenItems {
     return cart
         .map((item) {
-          if (!kitchenSelectedItems.contains(item)) return null;
+          if (!isKitchenItemSelected(item)) return null;
           final pendingQuantity =
               item.quantity - (_takeAwaySentQuantities[item.uniqueId] ?? 0);
           if (pendingQuantity <= 0) return null;
@@ -2528,7 +3263,7 @@ class HomeController extends GetxController {
         _kitchenSentQuantities[tableId] ?? const <String, int>{};
     return cart
         .map((item) {
-          if (selectedOnly && !kitchenSelectedItems.contains(item)) {
+          if (selectedOnly && !isKitchenItemSelected(item)) {
             return null;
           }
           final pendingQuantity =
@@ -2540,15 +3275,21 @@ class HomeController extends GetxController {
         .toList();
   }
 
-  bool isKitchenItemSelected(CartItem item) =>
-      kitchenSelectedItems.contains(item);
+  bool isKitchenItemSelected(CartItem item) => kitchenSelectedItems.any(
+    (selected) => selected.uniqueId == item.uniqueId,
+  );
 
   void setKitchenItemSelected(CartItem item, bool selected) {
     if (_rejectLockedTakeAwayCartEdit()) return;
     if (selected) {
+      kitchenSelectedItems.removeWhere(
+        (selectedItem) => selectedItem.uniqueId == item.uniqueId,
+      );
       kitchenSelectedItems.add(item);
     } else {
-      kitchenSelectedItems.remove(item);
+      kitchenSelectedItems.removeWhere(
+        (selectedItem) => selectedItem.uniqueId == item.uniqueId,
+      );
     }
   }
 
@@ -2589,7 +3330,7 @@ class HomeController extends GetxController {
               selectedTableId,
               staffId: staffId,
             )
-          : await useCase(selectedTableId);
+          : await _saveActiveKot(useCase, selectedTableId, staffId: staffId);
       final data = response.data;
       final order = data?.completedOrder;
       if (response.status == false || data == null || order == null) {
@@ -2624,7 +3365,7 @@ class HomeController extends GetxController {
     required int? staffId,
   }) async {
     try {
-      final response = await useCase(tableId);
+      final response = await _saveActiveKot(useCase, tableId, staffId: staffId);
       if (response.status != false || !_isMissingHoldBill(response.message)) {
         return response;
       }
@@ -2639,7 +3380,31 @@ class HomeController extends GetxController {
             kotOrderError.value ?? 'Unable to restore the KOT before closing.',
       );
     }
-    return useCase(tableId);
+    return _saveActiveKot(useCase, tableId, staffId: staffId);
+  }
+
+  Future<KotSaveResponse> _saveActiveKot(
+    SaveKotUseCase useCase,
+    int tableId, {
+    required int? staffId,
+  }) {
+    final activePersonNumber = activeKotPersonNumber.value;
+    final personId = activePersonNumber == null
+        ? null
+        : kotPersonBills[tableId]
+              ?.firstWhereOrNull(
+                (bill) => bill.personNumber == activePersonNumber,
+              )
+              ?.personId;
+    return useCase(
+      KotSaveRequest(
+        tableId: tableId,
+        staffId: staffId,
+        paymentMode: paymentMethod.value,
+        productIds: cart.map((item) => item.product.id).toList(),
+        personId: personId,
+      ),
+    );
   }
 
   Future<bool> _recreateMissingKotHold(
@@ -2659,7 +3424,11 @@ class HomeController extends GetxController {
     processingOrder.value = null;
     lastKotOrder.value = null;
     _kotOrdersNeedingReconciliation.remove(tableId);
-    return saveKitchenOrder(staffId: staffId, prepareForKitchenPrint: false);
+    return saveKitchenOrder(
+      staffId: staffId,
+      prepareForKitchenPrint: false,
+      printKitchen: false,
+    );
   }
 
   static String? _apiResponseMessage(DioException error) {
@@ -2691,8 +3460,13 @@ class HomeController extends GetxController {
   /// `kot_hold_save_order` request when the final bill is closed.
   Future<bool> prepareKotOrderForCompletion({required int? staffId}) async {
     if (!await reconcileEditedKotOrder(staffId: staffId)) return false;
-    if (pendingKitchenItems.isEmpty) return true;
-    return saveKitchenOrder(staffId: staffId, prepareForKitchenPrint: false);
+    if (selectedPendingKitchenItems.isEmpty) return true;
+    return saveKitchenOrder(
+      staffId: staffId,
+      selectedOnly: true,
+      prepareForKitchenPrint: false,
+      printKitchen: false,
+    );
   }
 
   static bool _isMissingHoldBill(String? message) {
@@ -2777,8 +3551,34 @@ class HomeController extends GetxController {
 
   void finishCompletedKotOrder() {
     final tableId = activeTableNumber.value ?? selectedKotTableNumber.value;
+    final personNumber = activeKotPersonNumber.value;
+    if (tableId != null && personNumber != null) {
+      _syncActiveTableOrder();
+      final remainingBills = List<KotPersonBill>.from(
+        kotPersonBills[tableId] ?? const <KotPersonBill>[],
+      )..removeWhere((bill) => bill.personNumber == personNumber);
+      if (remainingBills.isNotEmpty) {
+        kotPersonBills[tableId] = remainingBills;
+        tableOrders[tableId] = remainingBills.first.order;
+        activeTableNumber.value = null;
+        activeKotPersonNumber.value = null;
+        selectedKotTableNumber.value = tableId;
+        processingOrder.value = null;
+        processingOrderError.value = null;
+        lastKitchenOrderItems.clear();
+        _completedKotCartSnapshot.clear();
+        kitchenOrderAwaitingPrint.value = false;
+        kitchenOrderAwaitingPrintTable.value = null;
+        startNewBill();
+        flow.value = PosFlow.kot;
+        kotStage.value = KotStage.persons;
+        _restoreStaffAfterKotTable();
+        return;
+      }
+    }
     if (tableId != null) {
       tableOrders.remove(tableId);
+      kotPersonBills.remove(tableId);
       tableStatuses.remove(tableId);
       processingOrders.remove(tableId);
       submittedKitchenTables.remove(tableId);
@@ -2788,6 +3588,7 @@ class HomeController extends GetxController {
       _kotOrdersNeedingReconciliation.remove(tableId);
     }
     activeTableNumber.value = null;
+    activeKotPersonNumber.value = null;
     selectedKotTableNumber.value = null;
     processingOrder.value = null;
     processingOrderError.value = null;
@@ -2823,6 +3624,7 @@ class HomeController extends GetxController {
 
   void _clearDeletedKotOrder(int tableId) {
     tableOrders.remove(tableId);
+    kotPersonBills.remove(tableId);
     tableStatuses.remove(tableId);
     processingOrders.remove(tableId);
     submittedKitchenTables.remove(tableId);
@@ -3197,8 +3999,7 @@ class HomeController extends GetxController {
     final index = cart.indexWhere(
       (item) =>
           item.product.id == product.id &&
-          item.scannedWeightCode == null &&
-          item.kotProductReferences.isEmpty,
+          item.scannedWeightCode == null,
     );
     if (index < 0) {
       final item = CartItem(product: product);
@@ -3227,8 +4028,7 @@ class HomeController extends GetxController {
       final item = cart.firstWhere(
         (item) =>
             item.product.id == directProduct.id &&
-            item.scannedWeightCode == null &&
-            item.kotProductReferences.isEmpty,
+            item.scannedWeightCode == null,
       );
       return QrAddResult.success(item);
     }
@@ -3253,8 +4053,7 @@ class HomeController extends GetxController {
     final index = cart.indexWhere(
       (item) =>
           item.product.id == product.id &&
-          item.scannedWeightCode == weightCode &&
-          item.kotProductReferences.isEmpty,
+          item.scannedWeightCode == weightCode,
     );
     if (index >= 0) {
       cart[index].quantity++;
@@ -3303,14 +4102,101 @@ class HomeController extends GetxController {
 
   Future<bool> decrement(CartItem item) async {
     if (_rejectLockedTakeAwayCartEdit()) return false;
+    if (isRemovingKotQuantity.value) return false;
     removeKotQuantityError.value = null;
 
-    _decrementLocal(item);
-    log(
-      'Decremented product ${item.product.id} in local state only.',
-      name: 'RemoveKotQuantityController',
+    if (item.kotProductReferences.isEmpty) {
+      _decrementLocal(item);
+      log(
+        'Decremented unsaved product ${item.product.id} in local state.',
+        name: 'RemoveKotQuantityController',
+      );
+      return true;
+    }
+
+    final reference = item.kotProductReferences.last;
+    final detailId = reference.detailId;
+    if (detailId == null) {
+      removeKotQuantityError.value =
+          'The saved product detail is unavailable. Refresh the KOT and try again.';
+      return false;
+    }
+
+    final useCase = _removeKotQuantityUseCase;
+    if (useCase == null) {
+      removeKotQuantityError.value =
+          'Kitchen quantity removal service is unavailable.';
+      return false;
+    }
+
+    final tableId = activeTableNumber.value;
+    final activePersonNumber = activeKotPersonNumber.value;
+    final personId = tableId == null || activePersonNumber == null
+        ? null
+        : kotPersonBills[tableId]
+              ?.firstWhereOrNull(
+                (bill) => bill.personNumber == activePersonNumber,
+              )
+              ?.personId;
+    final normalizedPersonId = personId?.trim();
+    if (normalizedPersonId == null || normalizedPersonId.isEmpty) {
+      removeKotQuantityError.value =
+          'This KOT person has no backend person ID. Refresh the table and try again.';
+      return false;
+    }
+
+    final removeQuantity = item.effectiveWeightKg == null ? 1 : 0.1;
+    debugPrint(
+      '[RemoveKotQuantity] API target: orderId=${reference.orderId}, '
+      'personId=$normalizedPersonId, detailId=$detailId, '
+      'removeQuantity=$removeQuantity',
     );
-    return true;
+    isRemovingKotQuantity.value = true;
+    try {
+      final response = await useCase(
+        RemoveKotQuantityRequest(
+          orderId: reference.orderId,
+          personId: normalizedPersonId,
+          detailId: detailId,
+          removeQuantity: removeQuantity,
+        ),
+      );
+      if (response.status == false) {
+        removeKotQuantityError.value =
+            response.message ?? 'Unable to remove the product quantity.';
+        return false;
+      }
+
+      if ((response.data?.product?.remainingQuantity ?? 1) <= 0) {
+        item.kotProductReferences.remove(reference);
+      }
+      _decrementLocal(item, syncTotals: false);
+      _syncActiveTableOrder();
+      final order = response.data?.order;
+      backendSubtotal.value = order?.subtotal;
+      backendGst.value = order?.gst;
+      backendTotal.value = order?.total;
+      log(
+        'Removed $removeQuantity from product ${item.product.id}.',
+        name: 'RemoveKotQuantityController',
+      );
+      return true;
+    } on DioException catch (error) {
+      removeKotQuantityError.value = _saveOrderApiError(error);
+      return false;
+    } catch (error, stackTrace) {
+      removeKotQuantityError.value =
+          'Unable to remove the product quantity. Please try again.';
+      log(
+        'Unexpected KOT quantity-removal error',
+        name: 'RemoveKotQuantityController',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
+    } finally {
+      isRemovingKotQuantity.value = false;
+    }
   }
 
   void _decrementLocal(CartItem item, {bool syncTotals = true}) {
@@ -3372,6 +4258,19 @@ class HomeController extends GetxController {
 
     isRemovingKotProduct.value = true;
     try {
+      final tableId = activeTableNumber.value;
+      final activePersonNumber = activeKotPersonNumber.value;
+      final personId = tableId == null || activePersonNumber == null
+          ? null
+          : kotPersonBills[tableId]
+                ?.firstWhereOrNull(
+                  (bill) => bill.personNumber == activePersonNumber,
+                )
+                ?.personId;
+      debugPrint(
+        '[RemoveKotProduct] Active target: table=$tableId, '
+        'personNumber=$activePersonNumber, personId=$personId',
+      );
       // A cart line can contain rows from more than one KOT submission. Remove
       // every saved detail row before clearing the combined local cart line.
       bool networkError = false;
@@ -3381,6 +4280,7 @@ class HomeController extends GetxController {
             RemoveKotProductRequest(
               orderId: reference.orderId,
               detailId: reference.detailId!,
+              personId: personId,
             ),
           );
           // Only remove the reference if the API successfully processes it.

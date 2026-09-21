@@ -29,19 +29,21 @@ class TableListResponse {
 }
 
 class TableData {
-  const TableData({this.id, this.branchId, this.tableId});
+  const TableData({this.id, this.branchId, this.tableId, this.personCount});
 
   factory TableData.fromJson(Map<String, dynamic> json) {
     return TableData(
       id: _toInt(json['id']),
       branchId: _toInt(json['branch_id']),
       tableId: _toInt(json['table_id']),
+      personCount: _toInt(json['person_count']),
     );
   }
 
   final int? id;
   final int? branchId;
   final int? tableId;
+  final int? personCount;
 
   int? get displayNumber => tableId ?? id;
 
@@ -49,6 +51,7 @@ class TableData {
     'id': id,
     'branch_id': branchId,
     'table_id': tableId,
+    'person_count': personCount,
   };
 }
 

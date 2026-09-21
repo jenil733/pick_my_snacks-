@@ -18,25 +18,43 @@ class ProcessingOrderResponse {
 }
 
 class ProcessingOrderData {
-  const ProcessingOrderData({this.isProcessing, this.table, this.order});
+  const ProcessingOrderData({
+    this.isProcessing,
+    this.table,
+    this.order,
+    this.persons = const <ProcessingOrder>[],
+  });
 
   factory ProcessingOrderData.fromJson(Map<String, dynamic> json) {
     final rawTable = json['table'];
     final rawOrder = json['order'];
+    final table = rawTable is Map
+        ? ProcessingTable.fromJson(Map<String, dynamic>.from(rawTable))
+        : null;
+    final rawPersons = json['persons'];
+    final persons = rawPersons is List
+        ? rawPersons
+              .whereType<Map>()
+              .map(
+                (person) =>
+                    ProcessingOrder.fromJson(Map<String, dynamic>.from(person)),
+              )
+              .toList(growable: false)
+        : const <ProcessingOrder>[];
     return ProcessingOrderData(
       isProcessing: _toBool(json['is_processing']),
-      table: rawTable is Map
-          ? ProcessingTable.fromJson(Map<String, dynamic>.from(rawTable))
-          : null,
+      table: table,
       order: rawOrder is Map
           ? ProcessingOrder.fromJson(Map<String, dynamic>.from(rawOrder))
-          : null,
+          : _aggregatePersons(persons, tableId: table?.tableId),
+      persons: persons,
     );
   }
 
   final bool? isProcessing;
   final ProcessingTable? table;
   final ProcessingOrder? order;
+  final List<ProcessingOrder> persons;
 }
 
 class ProcessingTable {
@@ -61,6 +79,7 @@ class ProcessingOrder {
   const ProcessingOrder({
     this.id,
     this.orderId,
+    this.personId,
     this.processingOrderCount,
     this.processingOrderIds = const <int>[],
     this.processingOrderNumbers = const <String>[],
@@ -84,9 +103,11 @@ class ProcessingOrder {
 
   factory ProcessingOrder.fromJson(Map<String, dynamic> json) {
     final rawProducts = json['products'];
+    final personId = json['person_id']?.toString();
     return ProcessingOrder(
       id: _toInt(json['id']),
       orderId: json['order_id']?.toString(),
+      personId: personId,
       processingOrderCount: _toInt(json['processing_order_count']),
       processingOrderIds: _toIntList(json['processing_order_ids']),
       processingOrderNumbers: _toStringList(json['processing_order_numbers']),
@@ -106,20 +127,20 @@ class ProcessingOrder {
       billedIn: json['billed_in']?.toString(),
       createdAt: json['created_at']?.toString(),
       products: rawProducts is List
-          ? rawProducts
-                .whereType<Map>()
-                .map(
-                  (item) => ProcessingProduct.fromJson(
-                    Map<String, dynamic>.from(item),
-                  ),
-                )
-                .toList()
+          ? rawProducts.whereType<Map>().map((item) {
+              final product = Map<String, dynamic>.from(item);
+              if (product['person_id'] == null && personId != null) {
+                product['person_id'] = personId;
+              }
+              return ProcessingProduct.fromJson(product);
+            }).toList()
           : <ProcessingProduct>[],
     );
   }
 
   final int? id;
   final String? orderId;
+  final String? personId;
   final int? processingOrderCount;
   final List<int> processingOrderIds;
   final List<String> processingOrderNumbers;
@@ -141,11 +162,61 @@ class ProcessingOrder {
   final List<ProcessingProduct>? products;
 }
 
+ProcessingOrder? _aggregatePersons(
+  List<ProcessingOrder> persons, {
+  required int? tableId,
+}) {
+  if (persons.isEmpty) return null;
+  final first = persons.first;
+  return ProcessingOrder(
+    id: first.id,
+    orderId: first.orderId,
+    processingOrderCount: persons.fold<int>(
+      0,
+      (sum, person) => sum + (person.processingOrderCount ?? 0),
+    ),
+    processingOrderIds: persons
+        .expand((person) => person.processingOrderIds)
+        .toList(growable: false),
+    processingOrderNumbers: persons
+        .expand((person) => person.processingOrderNumbers)
+        .toList(growable: false),
+    tableId: tableId ?? first.tableId,
+    branchId: first.branchId,
+    staffId: first.staffId,
+    staffName: first.staffName,
+    customerName: first.customerName,
+    customerPhone: first.customerPhone,
+    subtotal: persons.fold<double>(
+      0,
+      (sum, person) => sum + (person.subtotal ?? 0),
+    ),
+    gst: persons.fold<double>(0, (sum, person) => sum + (person.gst ?? 0)),
+    discount: persons.fold<double>(
+      0,
+      (sum, person) => sum + (person.discount ?? 0),
+    ),
+    charge: persons.fold<double>(
+      0,
+      (sum, person) => sum + (person.charge ?? 0),
+    ),
+    total: persons.fold<double>(0, (sum, person) => sum + (person.total ?? 0)),
+    paymentMode: first.paymentMode,
+    status: first.status,
+    billedIn: first.billedIn,
+    createdAt: first.createdAt,
+    products: persons
+        .expand((person) => person.products ?? const <ProcessingProduct>[])
+        .toList(growable: false),
+  );
+}
+
 class ProcessingProduct {
   const ProcessingProduct({
     this.id,
     this.holdOrderId,
     this.holdOrderNumber,
+    this.personId,
     this.productId,
     this.productCode,
     this.productName,
@@ -165,6 +236,7 @@ class ProcessingProduct {
       id: _toInt(json['id']),
       holdOrderId: _toInt(json['hold_order_id']),
       holdOrderNumber: json['hold_order_number']?.toString(),
+      personId: json['person_id']?.toString(),
       productId: _toInt(json['product_id']),
       productCode: json['product_code']?.toString(),
       productName: json['product_name']?.toString(),
@@ -183,6 +255,7 @@ class ProcessingProduct {
   final int? id;
   final int? holdOrderId;
   final String? holdOrderNumber;
+  final String? personId;
   final int? productId;
   final String? productCode;
   final String? productName;

@@ -3,17 +3,26 @@ class RemoveKotQuantityRequest {
     required this.orderId,
     required this.detailId,
     required this.removeQuantity,
+    this.personId,
   });
 
   final int orderId;
   final num removeQuantity;
   final int detailId;
+  final String? personId;
 
-  Map<String, dynamic> toFormFields() => <String, dynamic>{
-    'order_id': orderId,
-    'detail_id': detailId,
-    'remove_quantity': removeQuantity,
-  };
+  Map<String, dynamic> toFormFields() {
+    final fields = <String, dynamic>{
+      'order_id': orderId,
+      'detail_id': detailId,
+      'remove_quantity': removeQuantity,
+    };
+    final normalizedPersonId = personId?.trim();
+    if (normalizedPersonId != null && normalizedPersonId.isNotEmpty) {
+      fields['person_id'] = normalizedPersonId;
+    }
+    return fields;
+  }
 }
 
 class RemoveKotQuantityResponse {

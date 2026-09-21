@@ -18,6 +18,12 @@ class RemoveKotQuantityRepositoryImpl implements RemoveKotQuantityRepository {
     final fields = request.toFormFields();
     log('POST ${ApiRoutes.rquantity}', name: 'RemoveKotQuantity');
     log('Request fields: $fields', name: 'RemoveKotQuantity');
+    log(
+      'REMOVE QUANTITY TARGET -> order_id=${request.orderId}, '
+      'person_id=${request.personId}, detail_id=${request.detailId}, '
+      'remove_quantity=${request.removeQuantity}',
+      name: 'RemoveKotQuantity',
+    );
     final json = await _apiService.post(
       ApiRoutes.rquantity,
       data: FormData.fromMap(fields),
