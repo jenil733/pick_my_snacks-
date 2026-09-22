@@ -1,10 +1,14 @@
+import 'package:dio/dio.dart' as dio;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:pick_my_snacks/src/core/const/api_routes.dart';
 import 'package:pick_my_snacks/src/data/model/post_kot_model.dart';
 import 'package:pick_my_snacks/src/data/model/remove_kot_quantity.dart';
+import 'package:pick_my_snacks/src/data/model/remove_kot_product.dart';
 import 'package:pick_my_snacks/src/domain/repository/kot_order_repository.dart';
+import 'package:pick_my_snacks/src/domain/repository/remove_kot_product_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/remove_kot_quantity_repository.dart';
+import 'package:pick_my_snacks/src/domain/usecase/remove_kot_product_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/remove_kot_quantity_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_kot_order_usecase.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
@@ -125,6 +129,217 @@ void main() {
     expect(controller.backendTotal.value, 189);
     expect(controller.pendingKitchenItems, isEmpty);
   });
+
+  test('controller removes a saved KOT quantity without a person ID', () async {
+    final quantityRepository = _FakeRemoveKotQuantityRepository();
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      SaveKotOrderUseCase(_FakeKotOrderRepository()),
+      null,
+      null,
+      RemoveKotQuantityUseCase(quantityRepository),
+    );
+    const product = Product(
+      id: 101,
+      name: 'Burger',
+      unit: '1pcs',
+      price: 180,
+      image: '',
+    );
+    controller.takeKotTable(3, staffName: 'Arun');
+    controller.addProduct(product);
+    controller.addProduct(product);
+    expect(await controller.saveKitchenOrder(staffId: 7), isTrue);
+
+    expect(await controller.decrement(controller.cart.single), isTrue);
+
+    expect(quantityRepository.requests, hasLength(1));
+    expect(quantityRepository.requests.single.personId, isNull);
+    expect(controller.cart.single.quantity, 1);
+  });
+
+  test('last KOT quantity uses the product removal API', () async {
+    final quantityRepository = _FakeRemoveKotQuantityRepository();
+    final productRepository = _FakeRemoveKotProductRepository();
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      SaveKotOrderUseCase(_FakeKotOrderRepository()),
+      null,
+      RemoveKotProductUseCase(productRepository),
+      RemoveKotQuantityUseCase(quantityRepository),
+    );
+    const product = Product(
+      id: 101,
+      name: 'Burger',
+      unit: '1pcs',
+      price: 180,
+      image: '',
+    );
+    controller.takeKotTable(3, staffName: 'Arun');
+    controller.addProduct(product);
+    expect(await controller.saveKitchenOrder(staffId: 7), isTrue);
+
+    expect(await controller.decrement(controller.cart.single), isTrue);
+
+    expect(productRepository.requests, hasLength(1));
+    expect(productRepository.requests.single.detailId, 91);
+    expect(quantityRepository.requests, isEmpty);
+    expect(controller.cart, isEmpty);
+  });
+
+  test('quantity 422 removes only the complete backend detail', () async {
+    final quantityRepository = _FakeRemoveKotQuantityRepository(
+      rejectCompleteQuantity: true,
+    );
+    final productRepository = _FakeRemoveKotProductRepository();
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      SaveKotOrderUseCase(_FakeKotOrderRepository()),
+      null,
+      RemoveKotProductUseCase(productRepository),
+      RemoveKotQuantityUseCase(quantityRepository),
+    );
+    const product = Product(
+      id: 101,
+      name: 'Burger',
+      unit: '1pcs',
+      price: 180,
+      image: '',
+    );
+    controller.takeKotTable(3, staffName: 'Arun');
+    controller.addProduct(product);
+    controller.addProduct(product);
+    expect(await controller.saveKitchenOrder(staffId: 7), isTrue);
+
+    expect(await controller.decrement(controller.cart.single), isTrue);
+
+    expect(quantityRepository.requests, hasLength(1));
+    expect(productRepository.requests, hasLength(1));
+    expect(productRepository.requests.single.detailId, 91);
+    expect(controller.cart.single.quantity, 1);
+  });
+
+  test(
+    'combined KOT row removes a one-quantity detail without a 422',
+    () async {
+      final quantityRepository = _FakeRemoveKotQuantityRepository();
+      final productRepository = _FakeRemoveKotProductRepository();
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        RemoveKotProductUseCase(productRepository),
+        RemoveKotQuantityUseCase(quantityRepository),
+      );
+      const product = Product(
+        id: 101,
+        name: 'Burger',
+        unit: '1pcs',
+        price: 180,
+        image: '',
+      );
+      controller.activeTableNumber.value = 3;
+      controller.cart.add(
+        CartItem(
+          product: product,
+          quantity: 2,
+          kotProductReferences: <KotProductReference>[
+            const KotProductReference(
+              orderId: 362,
+              detailId: 477,
+            ),
+            const KotProductReference(
+              orderId: 363,
+              detailId: 478,
+            ),
+          ],
+        ),
+      );
+
+      final decremented = await controller.decrement(controller.cart.single);
+      expect(
+        decremented,
+        isTrue,
+        reason: controller.removeKotQuantityError.value,
+      );
+
+      expect(quantityRepository.requests, isEmpty);
+      expect(productRepository.requests, hasLength(1));
+      expect(productRepository.requests.single.orderId, 363);
+      expect(productRepository.requests.single.detailId, 478);
+      expect(controller.cart.single.quantity, 1);
+      expect(controller.cart.single.kotProductReferences, hasLength(1));
+    },
+  );
+
+  test('decrementing an unsent increase stays local', () async {
+    final quantityRepository = _FakeRemoveKotQuantityRepository();
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      SaveKotOrderUseCase(_FakeKotOrderRepository()),
+      null,
+      null,
+      RemoveKotQuantityUseCase(quantityRepository),
+    );
+    const product = Product(
+      id: 101,
+      name: 'Burger',
+      unit: '1pcs',
+      price: 180,
+      image: '',
+    );
+    controller.takeKotTable(3, staffName: 'Arun');
+    controller.addProduct(product);
+    controller.addProduct(product);
+    expect(await controller.saveKitchenOrder(staffId: 7), isTrue);
+    controller.increment(controller.cart.single);
+
+    expect(await controller.decrement(controller.cart.single), isTrue);
+
+    expect(quantityRepository.requests, isEmpty);
+    expect(controller.cart.single.quantity, 2);
+    expect(controller.hasPendingKitchenItems, isFalse);
+  });
 }
 
 class _FakeKotOrderRepository implements KotOrderRepository {
@@ -148,6 +363,9 @@ class _FakeKotOrderRepository implements KotOrderRepository {
 }
 
 class _FakeRemoveKotQuantityRepository implements RemoveKotQuantityRepository {
+  _FakeRemoveKotQuantityRepository({this.rejectCompleteQuantity = false});
+
+  final bool rejectCompleteQuantity;
   final requests = <RemoveKotQuantityRequest>[];
 
   @override
@@ -155,6 +373,26 @@ class _FakeRemoveKotQuantityRepository implements RemoveKotQuantityRepository {
     RemoveKotQuantityRequest request,
   ) async {
     requests.add(request);
+    if (rejectCompleteQuantity) {
+      final options = dio.RequestOptions(path: ApiRoutes.rquantity);
+      throw dio.DioException.badResponse(
+        statusCode: 422,
+        requestOptions: options,
+        response: dio.Response<dynamic>(
+          requestOptions: options,
+          statusCode: 422,
+          data: <String, dynamic>{
+            'status': false,
+            'message':
+                'To remove the complete quantity, use the product remove API.',
+            'data': <String, dynamic>{
+              'current_quantity': 1,
+              'remove_quantity': 1,
+            },
+          },
+        ),
+      );
+    }
     return const RemoveKotQuantityResponse(
       status: true,
       message: 'Quantity removed',
@@ -179,5 +417,17 @@ class _FakeRemoveKotQuantityRepository implements RemoveKotQuantityRepository {
         ),
       ),
     );
+  }
+}
+
+class _FakeRemoveKotProductRepository implements RemoveKotProductRepository {
+  final requests = <RemoveKotProductRequest>[];
+
+  @override
+  Future<RemoveKotProductResponse> removeKotProduct(
+    RemoveKotProductRequest request,
+  ) async {
+    requests.add(request);
+    return const RemoveKotProductResponse(status: true);
   }
 }

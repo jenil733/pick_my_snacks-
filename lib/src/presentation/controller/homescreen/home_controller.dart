@@ -93,6 +93,7 @@ class CartItem {
     this.manualWeightKg,
     this.notes = '',
     this.backendRowTotal,
+    this.sentKitchenQuantity,
     List<KotProductReference>? kotProductReferences,
     String? uniqueId,
   }) : uniqueId =
@@ -106,6 +107,7 @@ class CartItem {
   double? manualWeightKg;
   String notes;
   final double? backendRowTotal;
+  int? sentKitchenQuantity;
   final List<KotProductReference> kotProductReferences;
 
   int? get scannedWeightGrams =>
@@ -174,6 +176,7 @@ class CartItem {
     manualWeightKg: manualWeightKg,
     notes: notes,
     backendRowTotal: backendRowTotal,
+    sentKitchenQuantity: sentKitchenQuantity,
     kotProductReferences: List<KotProductReference>.from(kotProductReferences),
     uniqueId: uniqueId,
   );
@@ -187,10 +190,15 @@ class CartItem {
 }
 
 class KotProductReference {
-  const KotProductReference({required this.orderId, this.detailId});
+  const KotProductReference({
+    required this.orderId,
+    this.detailId,
+    this.quantity,
+  });
 
   final int orderId;
   final int? detailId;
+  final num? quantity;
 }
 
 class _ProductUnitParts {
@@ -1065,20 +1073,24 @@ class HomeController extends GetxController {
                       ? 'code:${resolvedProduct.productId}'
                       : 'name:${resolvedProduct.name.toLowerCase()}';
 
+              final itemQty = item.quantity ?? 1;
               final ref = KotProductReference(
                 orderId: item.holdOrderId ?? remoteOrder?.id ?? 0,
                 detailId: item.id,
+                quantity: itemQty,
               );
-              final itemQty = item.quantity ?? 1;
 
               if (remoteItemsMap.containsKey(key)) {
                 final existingCartItem = remoteItemsMap[key]!;
                 existingCartItem.quantity += itemQty;
+                existingCartItem.sentKitchenQuantity =
+                    (existingCartItem.sentKitchenQuantity ?? 0) + itemQty;
                 existingCartItem.kotProductReferences.add(ref);
               } else {
                 remoteItemsMap[key] = CartItem(
                   product: resolvedProduct,
                   quantity: itemQty,
+                  sentKitchenQuantity: itemQty,
                   kotProductReferences: <KotProductReference>[ref],
                 );
               }
@@ -1179,10 +1191,12 @@ class HomeController extends GetxController {
         return CartItem(
           product: resolvedProduct,
           quantity: item.quantity ?? 1,
+          sentKitchenQuantity: item.quantity ?? 1,
           kotProductReferences: <KotProductReference>[
             KotProductReference(
               orderId: item.holdOrderId ?? remoteOrder.id ?? entry.key,
               detailId: item.id,
+              quantity: item.quantity ?? 1,
             ),
           ],
         );
@@ -1779,10 +1793,15 @@ class HomeController extends GetxController {
           image: '',
         ),
         quantity: item.quantity ?? 1,
+        sentKitchenQuantity: item.quantity ?? 1,
         kotProductReferences: holdOrderId == null
             ? null
             : <KotProductReference>[
-                KotProductReference(orderId: holdOrderId, detailId: item.id),
+                KotProductReference(
+                  orderId: holdOrderId,
+                  detailId: item.id,
+                  quantity: item.quantity ?? 1,
+                ),
               ],
       );
     }).toList();
@@ -3012,9 +3031,11 @@ class HomeController extends GetxController {
             KotProductReference(
               orderId: referenceOrderId,
               detailId: responseProduct?.id,
+              quantity: responseProduct?.quantity ?? pendingItem.quantity,
             ),
           );
         }
+        cartItem.sentKitchenQuantity = sentQuantities[cartItem.uniqueId];
       }
       if (prepareForKitchenPrint) {
         lastKitchenOrderItems.assignAll(<CartItem>[
@@ -3240,6 +3261,8 @@ class HomeController extends GetxController {
   bool get hasSelectedPendingKitchenItems =>
       selectedPendingKitchenItems.isNotEmpty;
 
+  bool get hasPendingKitchenItems => pendingKitchenItems.isNotEmpty;
+
   List<CartItem> get takeAwayPendingKitchenItems {
     return cart
         .map((item) {
@@ -3267,7 +3290,8 @@ class HomeController extends GetxController {
             return null;
           }
           final pendingQuantity =
-              item.quantity - (sentQuantities[item.uniqueId] ?? 0);
+              item.quantity -
+              (item.sentKitchenQuantity ?? sentQuantities[item.uniqueId] ?? 0);
           if (pendingQuantity <= 0) return null;
           return item.copy()..quantity = pendingQuantity;
         })
@@ -4082,6 +4106,7 @@ class HomeController extends GetxController {
   void increment(CartItem item) {
     if (_rejectLockedTakeAwayCartEdit()) return;
     if (item.effectiveWeightKg != null) {
+      _markSentKitchenItemChanged(item);
       item.manualWeightKg = double.parse(
         (item.editableAmount + 0.1).toStringAsFixed(3),
       );
@@ -4114,6 +4139,35 @@ class HomeController extends GetxController {
       return true;
     }
 
+    final tableId = activeTableNumber.value;
+    final sentQuantity =
+        item.sentKitchenQuantity ??
+        (tableId == null
+            ? null
+            : _kitchenSentQuantities[tableId]?[item.uniqueId]);
+    if (item.effectiveWeightKg == null &&
+        sentQuantity != null &&
+        item.quantity > sentQuantity) {
+      _decrementLocal(item);
+      log(
+        'Decremented unsent quantity for product ${item.product.id} locally.',
+        name: 'RemoveKotQuantityController',
+      );
+      return true;
+    }
+
+    final removesCompleteProduct = item.effectiveWeightKg == null
+        ? item.quantity <= 1
+        : item.editableAmount <= 0.1;
+    if (removesCompleteProduct) {
+      final removed = await removeKotProduct(item);
+      if (!removed) {
+        removeKotQuantityError.value =
+            removeKotProductError.value ?? 'Unable to remove the product.';
+      }
+      return removed;
+    }
+
     final reference = item.kotProductReferences.last;
     final detailId = reference.detailId;
     if (detailId == null) {
@@ -4129,7 +4183,6 @@ class HomeController extends GetxController {
       return false;
     }
 
-    final tableId = activeTableNumber.value;
     final activePersonNumber = activeKotPersonNumber.value;
     final personId = tableId == null || activePersonNumber == null
         ? null
@@ -4139,13 +4192,16 @@ class HomeController extends GetxController {
               )
               ?.personId;
     final normalizedPersonId = personId?.trim();
-    if (normalizedPersonId == null || normalizedPersonId.isEmpty) {
-      removeKotQuantityError.value =
-          'This KOT person has no backend person ID. Refresh the table and try again.';
-      return false;
-    }
 
     final removeQuantity = item.effectiveWeightKg == null ? 1 : 0.1;
+    final detailQuantity = reference.quantity?.toDouble();
+    if (detailQuantity != null && detailQuantity <= removeQuantity) {
+      return _removeKotDetailAfterQuantityRejection(
+        item: item,
+        reference: reference,
+        personId: normalizedPersonId,
+      );
+    }
     debugPrint(
       '[RemoveKotQuantity] API target: orderId=${reference.orderId}, '
       'personId=$normalizedPersonId, detailId=$detailId, '
@@ -4156,7 +4212,9 @@ class HomeController extends GetxController {
       final response = await useCase(
         RemoveKotQuantityRequest(
           orderId: reference.orderId,
-          personId: normalizedPersonId,
+          personId: normalizedPersonId?.isEmpty == true
+              ? null
+              : normalizedPersonId,
           detailId: detailId,
           removeQuantity: removeQuantity,
         ),
@@ -4167,10 +4225,23 @@ class HomeController extends GetxController {
         return false;
       }
 
-      if ((response.data?.product?.remainingQuantity ?? 1) <= 0) {
+      final remainingQuantity = response.data?.product?.remainingQuantity;
+      if ((remainingQuantity ?? 1) <= 0) {
         item.kotProductReferences.remove(reference);
+      } else if (remainingQuantity != null) {
+        final referenceIndex = item.kotProductReferences.indexOf(reference);
+        if (referenceIndex >= 0) {
+          item.kotProductReferences[referenceIndex] = KotProductReference(
+            orderId: reference.orderId,
+            detailId: reference.detailId,
+            quantity: remainingQuantity,
+          );
+        }
       }
       _decrementLocal(item, syncTotals: false);
+      if (cart.contains(item)) {
+        item.sentKitchenQuantity = item.quantity;
+      }
       _syncActiveTableOrder();
       final order = response.data?.order;
       backendSubtotal.value = order?.subtotal;
@@ -4182,6 +4253,13 @@ class HomeController extends GetxController {
       );
       return true;
     } on DioException catch (error) {
+      if (_mustRemoveCompleteKotDetail(error)) {
+        return _removeKotDetailAfterQuantityRejection(
+          item: item,
+          reference: reference,
+          personId: normalizedPersonId,
+        );
+      }
       removeKotQuantityError.value = _saveOrderApiError(error);
       return false;
     } catch (error, stackTrace) {
@@ -4196,6 +4274,85 @@ class HomeController extends GetxController {
       return false;
     } finally {
       isRemovingKotQuantity.value = false;
+    }
+  }
+
+  bool _mustRemoveCompleteKotDetail(DioException error) {
+    if (error.response?.statusCode != 422) return false;
+    final data = error.response?.data;
+    if (data is! Map) return false;
+    final message = data['message']?.toString().toLowerCase() ?? '';
+    final details = data['data'];
+    final currentQuantity = details is Map
+        ? double.tryParse(details['current_quantity']?.toString() ?? '')
+        : null;
+    final removeQuantity = details is Map
+        ? double.tryParse(details['remove_quantity']?.toString() ?? '')
+        : null;
+    return message.contains('complete quantity') ||
+        (currentQuantity != null &&
+            removeQuantity != null &&
+            removeQuantity >= currentQuantity);
+  }
+
+  Future<bool> _removeKotDetailAfterQuantityRejection({
+    required CartItem item,
+    required KotProductReference reference,
+    required String? personId,
+  }) async {
+    final detailId = reference.detailId;
+    final useCase = _removeKotProductUseCase;
+    if (detailId == null || useCase == null) {
+      removeKotQuantityError.value =
+          'Kitchen product removal service is unavailable.';
+      return false;
+    }
+
+    isRemovingKotProduct.value = true;
+    try {
+      final response = await useCase(
+        RemoveKotProductRequest(
+          orderId: reference.orderId,
+          detailId: detailId,
+          personId: personId?.isEmpty == true ? null : personId,
+        ),
+      );
+      if (response.status == false) {
+        removeKotQuantityError.value =
+            response.message ?? 'Unable to remove the product quantity.';
+        return false;
+      }
+
+      item.kotProductReferences.remove(reference);
+      _decrementLocal(item, syncTotals: false);
+      if (cart.contains(item)) {
+        item.sentKitchenQuantity = item.quantity;
+      }
+      _syncActiveTableOrder();
+      final order = response.data?.order;
+      backendSubtotal.value = order?.subtotal;
+      backendGst.value = order?.gst;
+      backendTotal.value = order?.total;
+      log(
+        'Removed complete KOT detail $detailId after quantity API rejection.',
+        name: 'RemoveKotQuantityController',
+      );
+      return true;
+    } on DioException catch (error) {
+      removeKotQuantityError.value = _saveOrderApiError(error);
+      return false;
+    } catch (error, stackTrace) {
+      removeKotQuantityError.value =
+          'Unable to remove the product quantity. Please try again.';
+      log(
+        'Unexpected KOT detail-removal error',
+        name: 'RemoveKotQuantityController',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
+    } finally {
+      isRemovingKotProduct.value = false;
     }
   }
 
@@ -4360,8 +4517,10 @@ class HomeController extends GetxController {
     if (tableId == null) return;
     final sentQuantities = _kitchenSentQuantities[tableId];
     final itemKey = key ?? item.uniqueId;
-    if ((sentQuantities?[itemKey] ?? 0) <= 0) return;
-    sentQuantities!.remove(itemKey);
+    final sentQuantity = item.sentKitchenQuantity ?? sentQuantities?[itemKey];
+    if ((sentQuantity ?? 0) <= 0) return;
+    item.sentKitchenQuantity = 0;
+    sentQuantities?.remove(itemKey);
     _kotOrdersNeedingReconciliation.add(tableId);
   }
 
@@ -4370,9 +4529,10 @@ class HomeController extends GetxController {
     if (tableId == null) return;
     final sentQuantities = _kitchenSentQuantities[tableId];
     final itemKey = key ?? item.uniqueId;
-    final sent = sentQuantities?[itemKey] ?? 0;
+    final sent = item.sentKitchenQuantity ?? sentQuantities?[itemKey] ?? 0;
     if (sent <= quantity) return;
-    sentQuantities![itemKey] = quantity;
+    item.sentKitchenQuantity = quantity;
+    if (sentQuantities != null) sentQuantities[itemKey] = quantity;
     _kotOrdersNeedingReconciliation.add(tableId);
   }
 

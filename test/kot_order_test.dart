@@ -163,6 +163,7 @@ void main() {
     );
     controller.updateItemNotes(controller.cart.single, 'extra salt');
     expect(controller.submittedKitchenTables.contains(3), isFalse);
+    expect(controller.hasPendingKitchenItems, isTrue);
 
     final saved = await controller.saveKitchenOrder(staffId: 7);
 
@@ -176,6 +177,7 @@ void main() {
     expect(controller.savedOrderNumber.value, 'KOT-12');
     expect(controller.kotOrderError.value, isNull);
     expect(controller.lastKitchenOrderItems.single.product.id, 101);
+    expect(controller.hasPendingKitchenItems, isFalse);
 
     controller.confirmKitchenOrderPrinted();
     controller.addProduct(
@@ -188,6 +190,7 @@ void main() {
         image: '',
       ),
     );
+    expect(controller.hasPendingKitchenItems, isTrue);
 
     final secondSaved = await controller.saveKitchenOrder(staffId: 7);
 
@@ -198,6 +201,7 @@ void main() {
     expect(controller.lastKitchenOrderItems.single.product.id, 202);
     expect(controller.cart, hasLength(2));
     expect(controller.subtotal, 100);
+    expect(controller.hasPendingKitchenItems, isFalse);
 
     controller.confirmKitchenOrderPrinted();
     final duplicateSaved = await controller.saveKitchenOrder(staffId: 7);

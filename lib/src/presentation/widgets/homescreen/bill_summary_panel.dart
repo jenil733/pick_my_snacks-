@@ -310,16 +310,15 @@ class BillSummaryPanel extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: controller.isSavingKotOrder.value
+                onPressed:
+                    controller.isSavingKotOrder.value ||
+                        !controller.hasPendingKitchenItems
                     ? null
                     : () => sendKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: Text(
                   controller.isSavingKotOrder.value
                       ? 'Sending...'
-                      : controller.hasKitchenOrderAwaitingPrint &&
-                            !controller.hasSelectedPendingKitchenItems
-                      ? 'Retry Kitchen Bill'
                       : 'Kitchen Bill',
                 ),
                 style: FilledButton.styleFrom(
@@ -564,7 +563,7 @@ class BillQuantityControl extends StatelessWidget {
             icon: Icons.remove_rounded,
             onPressed: controller.isTakeAwayCartLocked
                 ? null
-                : () => controller.decrement(item),
+                : () => _decrement(context),
           ),
           EditableItemAmount(controller: controller, item: item, width: 36),
           _button(
@@ -577,6 +576,15 @@ class BillQuantityControl extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _decrement(BuildContext context) async {
+    final decremented = await controller.decrement(item);
+    if (!context.mounted || decremented) return;
+    final error = controller.removeKotQuantityError.value;
+    if (error != null && error.isNotEmpty) {
+      AppToast.error(context, error);
+    }
   }
 
   Widget _button({

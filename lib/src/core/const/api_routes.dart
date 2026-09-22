@@ -1,9 +1,9 @@
 class ApiRoutes {
   ApiRoutes._();
 
-  // static const baseUrl = 'http://64.227.170.206/iyangarbakery.com/public/api/';
-  static const baseUrl =
-      'http://64.227.170.206/pickmysnacks_billing/public/api/';
+  static const baseUrl = 'http://64.227.170.206/iyangarbakery.com/public/api/';
+  // static const baseUrl =
+  //     'http://64.227.170.206/pickmysnacks_billing/public/api/';
 
   static String categoryProducts(int id) => 'get_category_products/$id';
   static const categories = 'get_categories';

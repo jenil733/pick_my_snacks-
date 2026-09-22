@@ -265,6 +265,10 @@ void main() {
     expect(controller.cart.single.product.name, 'Veg Sandwich');
     expect(controller.cart.single.quantity, 2);
     expect(controller.kotStage.value, KotStage.order);
+    expect(controller.hasPendingKitchenItems, isFalse);
+
+    controller.increment(controller.cart.single);
+    expect(controller.hasPendingKitchenItems, isTrue);
 
     controller.showKotTables();
     expect(staffController.selectedStaffName, 'Sam');

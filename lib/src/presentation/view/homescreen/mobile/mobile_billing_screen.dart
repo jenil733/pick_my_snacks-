@@ -94,111 +94,126 @@ class MobileBillingScreen extends StatelessWidget {
                     child: Column(
                       children: controller.cart
                           .map(
-                            (item) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 9),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      if (controller.flow.value ==
-                                              PosFlow.kot ||
-                                          controller.flow.value ==
-                                              PosFlow.takeAway) ...[
-                                        Tooltip(
-                                          message:
-                                              controller.flow.value ==
-                                                  PosFlow.takeAway
-                                              ? 'Include ${item.product.name} in Kitchen Bill'
-                                              : 'Send ${item.product.name} to kitchen',
-                                          child: Checkbox(
-                                            activeColor: AppColors.primaryDark,
-                                            side: BorderSide(
-                                              color: AppColors.primaryDark,
-                                              width: 2.1,
-                                            ),
+                            (item) => GestureDetector(
+                              onTap: () => controller.setKitchenItemSelected(
+                                item,
+                                !controller.isKitchenItemSelected(item),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 9,
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        if (controller.flow.value ==
+                                                PosFlow.kot ||
+                                            controller.flow.value ==
+                                                PosFlow.takeAway) ...[
+                                          Tooltip(
+                                            message:
+                                                controller.flow.value ==
+                                                    PosFlow.takeAway
+                                                ? 'Include ${item.product.name} in Kitchen Bill'
+                                                : 'Send ${item.product.name} to kitchen',
+                                            child: CustomCheckbox(
+                                              // activeColor: AppColors.primaryDark,
 
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
+                                              // side: BorderSide(
+                                              //   color: AppColors.primaryDark,
+                                              //   width: 2.1,
+                                              // ),
 
-                                            value: controller
-                                                .isKitchenItemSelected(item),
-                                            onChanged: (value) => controller
-                                                .setKitchenItemSelected(
-                                                  item,
-                                                  value ?? false,
-                                                ),
-                                            visualDensity:
-                                                VisualDensity.compact,
+                                              // shape: RoundedRectangleBorder(
+                                              //   borderRadius:
+                                              //       BorderRadius.circular(4),
+                                              // ),
+                                              checkedIcon: Icons
+                                                  .indeterminate_check_box_outlined,
+                                              uncheckedIcon:
+                                                  Icons.check_box_outline_blank,
+                                              checkedColor: AppColors.delete,
+                                              uncheckedColor: AppColors.divider,
+                                              size: 24,
+                                              value: controller
+                                                  .isKitchenItemSelected(item),
+                                              onChanged: (value) => controller
+                                                  .setKitchenItemSelected(
+                                                    item,
+                                                    value,
+                                                  ),
+                                              // visualDensity:
+                                              //     VisualDensity.compact,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                        ],
+                                        Expanded(
+                                          child: Text(
+                                            item.product.name,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextHelper.body,
                                           ),
                                         ),
-                                        const SizedBox(width: 4),
-                                      ],
-                                      Expanded(
-                                        child: Text(
-                                          item.product.name,
-                                          maxLines: 3,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextHelper.body,
+                                        const SizedBox(width: 6),
+                                        BillQuantityControl(
+                                          controller: controller,
+                                          item: item,
                                         ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      BillQuantityControl(
+                                        const SizedBox(width: 6),
+                                        SizedBox(
+                                          width: 68,
+                                          child: Column(
+                                            children: [
+                                              IconButton(
+                                                tooltip:
+                                                    'Delete ${item.product.name}',
+                                                onPressed: () =>
+                                                    _deleteItem(context, item),
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                constraints:
+                                                    const BoxConstraints.tightFor(
+                                                      width: 34,
+                                                      height: 34,
+                                                    ),
+                                                color: AppColors.delete,
+                                                icon: const Icon(
+                                                  Icons.delete_outline_rounded,
+                                                  size: 19,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                money(item.total),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
+                                                style: TextHelper.bodySemiBold,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (controller.flow.value == PosFlow.kot ||
+                                        controller.flow.value ==
+                                            PosFlow.takeAway) ...[
+                                      const SizedBox(height: 8),
+                                      ExtraItemNoteField(
+                                        key: ValueKey(
+                                          'mobile-extra-${item.uniqueId}',
+                                        ),
                                         controller: controller,
                                         item: item,
                                       ),
-                                      const SizedBox(width: 6),
-                                      SizedBox(
-                                        width: 68,
-                                        child: Column(
-                                          children: [
-                                            IconButton(
-                                              tooltip:
-                                                  'Delete ${item.product.name}',
-                                              onPressed: () =>
-                                                  _deleteItem(context, item),
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              constraints:
-                                                  const BoxConstraints.tightFor(
-                                                    width: 34,
-                                                    height: 34,
-                                                  ),
-                                              color: AppColors.delete,
-                                              icon: const Icon(
-                                                Icons.delete_outline_rounded,
-                                                size: 19,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              money(item.total),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              textAlign: TextAlign.center,
-                                              style: TextHelper.bodySemiBold,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
                                     ],
-                                  ),
-                                  if (controller.flow.value == PosFlow.kot ||
-                                      controller.flow.value ==
-                                          PosFlow.takeAway) ...[
-                                    const SizedBox(height: 8),
-                                    ExtraItemNoteField(
-                                      key: ValueKey(
-                                        'mobile-extra-${item.uniqueId}',
-                                      ),
-                                      controller: controller,
-                                      item: item,
-                                    ),
                                   ],
-                                ],
+                                ),
                               ),
                             ),
                           )
@@ -485,16 +500,15 @@ class MobileBillingScreen extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: controller.isSavingKotOrder.value
+                onPressed:
+                    controller.isSavingKotOrder.value ||
+                        !controller.hasPendingKitchenItems
                     ? null
                     : () => sendKotBill(context, controller),
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: Text(
                   controller.isSavingKotOrder.value
                       ? 'Sending...'
-                      : controller.hasKitchenOrderAwaitingPrint &&
-                            !controller.hasSelectedPendingKitchenItems
-                      ? 'Retry Kitchen Bill'
                       : 'Kitchen Bill',
                 ),
                 style: FilledButton.styleFrom(
@@ -591,6 +605,41 @@ class _SummaryCard extends StatelessWidget {
           style: (style ?? TextHelper.bodySemiBold).copyWith(color: color),
         ),
       ],
+    );
+  }
+}
+
+class CustomCheckbox extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final IconData checkedIcon;
+  final IconData uncheckedIcon;
+  final Color? checkedColor;
+  final Color? uncheckedColor;
+  final double size;
+
+  const CustomCheckbox({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.checkedIcon = Icons.check_box,
+    this.uncheckedIcon = Icons.check_box_outline_blank,
+    this.checkedColor,
+    this.uncheckedColor,
+    this.size = 24,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      child: Icon(
+        value ? checkedIcon : uncheckedIcon,
+        size: size,
+        color: value
+            ? (checkedColor ?? Theme.of(context).colorScheme.primary)
+            : (uncheckedColor ?? Colors.grey),
+      ),
     );
   }
 }
