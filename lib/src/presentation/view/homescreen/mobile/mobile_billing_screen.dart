@@ -131,8 +131,12 @@ class MobileBillingScreen extends StatelessWidget {
                                               //   borderRadius:
                                               //       BorderRadius.circular(4),
                                               // ),
-                                              checkedIcon: Icons
-                                                  .indeterminate_check_box_outlined,
+                                              checkedIcon:
+                                                  controller.flow.value ==
+                                                      PosFlow.takeAway
+                                                  ? Icons.check_box
+                                                  : Icons
+                                                        .indeterminate_check_box_outlined,
                                               uncheckedIcon:
                                                   Icons.check_box_outline_blank,
                                               checkedColor: AppColors.delete,

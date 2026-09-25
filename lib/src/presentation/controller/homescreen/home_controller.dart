@@ -3477,17 +3477,16 @@ class HomeController extends GetxController {
     return false;
   }
 
-  /// Verifies that the KOT can be completed without submitting pending rows.
+  /// Ensures every pending KOT row is submitted before the bill is closed.
   ///
-  /// Only products explicitly selected through the Kitchen Bill action may be
-  /// sent to [saveKitchenOrder]. Unselected products stay out of the
-  /// `kot_hold_save_order` request when the final bill is closed.
+  /// The Kitchen Bill checkbox controls the explicit kitchen-print action, but
+  /// closing the bill must also persist newly added, unchecked products.
   Future<bool> prepareKotOrderForCompletion({required int? staffId}) async {
     if (!await reconcileEditedKotOrder(staffId: staffId)) return false;
-    if (selectedPendingKitchenItems.isEmpty) return true;
+    if (pendingKitchenItems.isEmpty) return true;
     return saveKitchenOrder(
       staffId: staffId,
-      selectedOnly: true,
+      selectedOnly: false,
       prepareForKitchenPrint: false,
       printKitchen: false,
     );

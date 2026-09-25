@@ -385,7 +385,7 @@ void main() {
   );
 
   test(
-    'closing a KOT does not send products left out of the Kitchen Bill',
+    'closing a KOT sends products left out of the Kitchen Bill',
     () async {
       final repository = _FakeKotOrderRepository();
       final controller = HomeController(
@@ -432,10 +432,11 @@ void main() {
 
       expect(await controller.prepareKotOrderForCompletion(staffId: 7), isTrue);
 
-      expect(repository.requests, hasLength(1));
-      expect(repository.requests.single.products.single.productId, 101);
-      expect(controller.pendingKitchenItems, hasLength(1));
-      expect(controller.pendingKitchenItems.single.product.id, 202);
+      expect(repository.requests, hasLength(2));
+      expect(repository.requests.last.printKitchen, isFalse);
+      expect(repository.requests.last.products.single.productId, 202);
+      expect(repository.requests.last.products.single.isKot, isTrue);
+      expect(controller.pendingKitchenItems, isEmpty);
     },
   );
 
@@ -538,7 +539,7 @@ void main() {
     },
   );
 
-  testWidgets('Close Bill does not send unselected products to the kitchen', (
+  testWidgets('Close Bill saves unselected products without kitchen printing', (
     tester,
   ) async {
     Get.testMode = true;
@@ -604,8 +605,10 @@ void main() {
     await tester.tap(find.text('Close Bill'));
     await tester.pumpAndSettle();
 
-    // Closing must not call the Raspberry Pi kitchen-print endpoint again.
-    expect(kitchenRepository.requests, hasLength(1));
+    expect(kitchenRepository.requests, hasLength(2));
+    expect(kitchenRepository.requests.last.printKitchen, isFalse);
+    expect(kitchenRepository.requests.last.products, hasLength(1));
+    expect(kitchenRepository.requests.last.products.single.productId, 202);
     expect(controller.hasKitchenOrderAwaitingPrint, isFalse);
     expect(controller.lastKitchenOrderItems, isEmpty);
     expect(closeRepository.tableIds, <int>[3]);
