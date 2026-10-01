@@ -29,6 +29,8 @@ import 'package:pick_my_snacks/src/data/repository/take_away_completed_repositor
 import 'package:pick_my_snacks/src/data/repository/take_away_completed_view_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/take_away_processing_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/take_away_save_order_repository_impl.dart';
+import 'package:pick_my_snacks/src/data/repository/take_away_remove_product_repository_impl.dart';
+import 'package:pick_my_snacks/src/data/repository/take_away_change_quantity_repository_impl.dart';
 import 'package:pick_my_snacks/src/data/repository/processing_order_repository_impl.dart';
 import 'package:pick_my_snacks/src/domain/repository/delete_held_bill_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/get_hold_orders_repository.dart';
@@ -52,6 +54,8 @@ import 'package:pick_my_snacks/src/domain/repository/take_away_completed_reposit
 import 'package:pick_my_snacks/src/domain/repository/take_away_completed_view_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/take_away_processing_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/take_away_save_order_repository.dart';
+import 'package:pick_my_snacks/src/domain/repository/take_away_remove_product_repository.dart';
+import 'package:pick_my_snacks/src/domain/repository/take_away_change_quantity_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/processing_order_repository.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_staff_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_tables_usecase.dart';
@@ -76,6 +80,8 @@ import 'package:pick_my_snacks/src/domain/usecase/save_kot_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/take_away_hold_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/take_away_save_order_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/take_away_remove_product_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/take_away_change_quantity_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/resume_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/remove_kot_product_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/remove_kot_quantity_usecase.dart';
@@ -120,7 +126,10 @@ Future<String> setupServiceLocator() async {
   }
 
   if (!Get.isRegistered<ReceiptPrinterService>()) {
-    Get.put<ReceiptPrinterService>(ReceiptPrinterService(), permanent: true);
+    Get.put<ReceiptPrinterService>(
+      ReceiptPrinterService(apiService: Get.find<ApiService>()),
+      permanent: true,
+    );
   }
 
   if (!Get.isRegistered<KitchenPrinter>()) {
@@ -278,6 +287,20 @@ Future<String> setupServiceLocator() async {
   if (!Get.isRegistered<TakeAwaySaveOrderRepository>()) {
     Get.lazyPut<TakeAwaySaveOrderRepository>(
       () => TakeAwaySaveOrderRepositoryImpl(Get.find<ApiService>()),
+      fenix: true,
+    );
+  }
+
+  if (!Get.isRegistered<TakeAwayRemoveProductRepository>()) {
+    Get.lazyPut<TakeAwayRemoveProductRepository>(
+      () => TakeAwayRemoveProductRepositoryImpl(Get.find<ApiService>()),
+      fenix: true,
+    );
+  }
+
+  if (!Get.isRegistered<TakeAwayChangeQuantityRepository>()) {
+    Get.lazyPut<TakeAwayChangeQuantityRepository>(
+      () => TakeAwayChangeQuantityRepositoryImpl(Get.find<ApiService>()),
       fenix: true,
     );
   }
@@ -486,6 +509,24 @@ Future<String> setupServiceLocator() async {
   if (!Get.isRegistered<TakeAwaySaveOrderUseCase>()) {
     Get.lazyPut<TakeAwaySaveOrderUseCase>(
       () => TakeAwaySaveOrderUseCase(Get.find<TakeAwaySaveOrderRepository>()),
+      fenix: true,
+    );
+  }
+
+  if (!Get.isRegistered<TakeAwayRemoveProductUseCase>()) {
+    Get.lazyPut<TakeAwayRemoveProductUseCase>(
+      () => TakeAwayRemoveProductUseCase(
+        Get.find<TakeAwayRemoveProductRepository>(),
+      ),
+      fenix: true,
+    );
+  }
+
+  if (!Get.isRegistered<TakeAwayChangeQuantityUseCase>()) {
+    Get.lazyPut<TakeAwayChangeQuantityUseCase>(
+      () => TakeAwayChangeQuantityUseCase(
+        Get.find<TakeAwayChangeQuantityRepository>(),
+      ),
       fenix: true,
     );
   }

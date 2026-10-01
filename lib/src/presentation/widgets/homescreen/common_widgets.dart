@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:pick_my_snacks/src/core/const/appcolors.dart';
 import 'package:pick_my_snacks/src/core/const/appimages.dart';
@@ -225,13 +225,17 @@ class ProductThumbnail extends StatelessWidget {
     }
 
     var pathStr = cleanPath;
-    if (pathStr.startsWith('/')) pathStr = pathStr.substring(1);
-    if (pathStr.startsWith('storage/')) pathStr = pathStr.substring('storage/'.length);
-    if (pathStr.startsWith('public/')) pathStr = pathStr.substring('public/'.length);
+    if (pathStr.startsWith('/')) {
+      pathStr = pathStr.substring(1);
+    }
+    if (pathStr.startsWith('storage/')) {
+      pathStr = pathStr.substring('storage/'.length);
+    }
+    if (pathStr.startsWith('public/')) {
+      pathStr = pathStr.substring('public/'.length);
+    }
 
-    final fullUrl = isHttp
-        ? cleanPath
-        : pathStr;
+    final fullUrl = isHttp ? cleanPath : pathStr;
 
     if (Uri.tryParse(fullUrl)?.path.toLowerCase().endsWith('.svg') == true) {
       return SvgPicture.network(
@@ -264,15 +268,14 @@ class ProductThumbnail extends StatelessWidget {
               strokeWidth: 1.5,
               value: loadingProgress.expectedTotalBytes != null
                   ? loadingProgress.cumulativeBytesLoaded /
-                      (loadingProgress.expectedTotalBytes ?? 1)
+                        (loadingProgress.expectedTotalBytes ?? 1)
                   : null,
               color: AppColors.yellowDark,
             ),
           ),
         );
       },
-      errorBuilder: (context, error, stackTrace) =>
-          const _DefaultProductIcon(),
+      errorBuilder: (context, error, stackTrace) => const _DefaultProductIcon(),
     );
   }
 }
@@ -468,7 +471,7 @@ class _ItemAmountDialogState extends State<_ItemAmountDialog> {
             backgroundColor: AppColors.primary,
             foregroundColor: AppColors.text,
           ),
-          onPressed: () {
+          onPressed: () async {
             final normalized = _inputController.text.trim().replaceAll(
               ',',
               '.',
@@ -480,10 +483,11 @@ class _ItemAmountDialogState extends State<_ItemAmountDialog> {
               });
               return;
             }
-            final validationError = widget.controller.setItemAmount(
+            final validationError = await widget.controller.applyItemAmount(
               widget.item,
               amount,
             );
+            if (!context.mounted) return;
             if (validationError != null) {
               setState(() {
                 error = validationError;
@@ -580,4 +584,3 @@ Future<void> deleteKotTableOrder(
   }
   AppToast.show(context, 'Table $tableId is now free.');
 }
-

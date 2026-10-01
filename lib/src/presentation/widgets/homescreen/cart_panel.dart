@@ -62,13 +62,9 @@ class CartPanel extends StatelessWidget {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (controller.flow.value == PosFlow.kot ||
-                                controller.flow.value == PosFlow.takeAway) ...[
+                            if (controller.flow.value == PosFlow.kot) ...[
                               Tooltip(
-                                message:
-                                    controller.flow.value == PosFlow.takeAway
-                                    ? 'Include ${item.product.name} in Kitchen Bill'
-                                    : 'Send ${item.product.name} to kitchen',
+                                message: 'Send ${item.product.name} to kitchen',
                                 child: Checkbox(
                                   value: controller.isKitchenItemSelected(item),
                                   onChanged: (value) =>

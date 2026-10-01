@@ -17,7 +17,7 @@ class TakeAwaySaveOrderRepositoryImpl implements TakeAwaySaveOrderRepository {
   ) async {
     final fields = request.toFormFields();
     log('POST ${ApiRoutes.takeAwaySaveOrder}', name: 'TakeAwaySaveOrder');
-    log('hold_order_id: ${request.holdOrderId}', name: 'TakeAwaySaveOrder');
+    log('hold_order_ids: ${request.holdOrderIds}', name: 'TakeAwaySaveOrder');
 
     final json = await _apiService.post(
       ApiRoutes.takeAwaySaveOrder,

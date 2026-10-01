@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:pick_my_snacks/src/core/const/api_routes.dart';
+import 'package:pick_my_snacks/src/core/services/api_services.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
@@ -24,10 +26,95 @@ class ThermalPrinterDevice {
   final String address;
 }
 
+typedef StoreDetailsLoader = Future<Map<String, dynamic>> Function();
+
+class ReceiptStoreDetails {
+  const ReceiptStoreDetails({
+    required this.place,
+    required this.pincode,
+    required this.cell,
+  });
+
+  factory ReceiptStoreDetails.fromResponse(Map<String, dynamic> response) {
+    final rawData = response['data'];
+    final data = rawData is Map
+        ? Map<String, dynamic>.from(rawData)
+        : const <String, dynamic>{};
+    final pincode = data['pincode']?.toString().trim() ?? '';
+    var place = data['address']?.toString().trim() ?? '';
+    if (pincode.isNotEmpty) {
+      place = place.replaceFirst(
+        RegExp(r'\s*-?\s*' + RegExp.escape(pincode) + r'\s*$'),
+        '',
+      );
+    }
+    place = place
+        .replaceAll(RegExp(r'\s*,\s*'), ', ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (place.isEmpty) {
+      place = data['city']?.toString().trim() ?? '';
+    }
+
+    return ReceiptStoreDetails(
+      place: place,
+      pincode: pincode,
+      cell:
+          data['cell']?.toString().trim() ??
+          data['phone']?.toString().trim() ??
+          data['contact_number']?.toString().trim() ??
+          '',
+    );
+  }
+
+  final String place;
+  final String pincode;
+  final String cell;
+
+  bool get isComplete =>
+      place.isNotEmpty && pincode.isNotEmpty && cell.isNotEmpty;
+}
+
 class ReceiptPrinterService {
+  ReceiptPrinterService({
+    ApiService? apiService,
+    StoreDetailsLoader? storeDetailsLoader,
+  }) : _storeDetailsLoader =
+           storeDetailsLoader ??
+           (apiService == null
+               ? null
+               : () => apiService.get(ApiRoutes.storeDetails));
+
   static const _statusTimeout = Duration(seconds: 3);
   static const _connectionTimeout = Duration(seconds: 15);
   static const _printTimeout = Duration(seconds: 20);
+  static const _fallbackStoreDetails = ReceiptStoreDetails(
+    place: 'Vettturnimadam, Nagercoil',
+    pincode: '629003',
+    cell: '9943873319',
+  );
+
+  final StoreDetailsLoader? _storeDetailsLoader;
+  ReceiptStoreDetails? _cachedStoreDetails;
+
+  Future<ReceiptStoreDetails> _getStoreDetails() async {
+    final cached = _cachedStoreDetails;
+    if (cached != null) return cached;
+
+    final loader = _storeDetailsLoader;
+    if (loader == null) return _fallbackStoreDetails;
+    try {
+      final response = await loader();
+      if (response['status'] == false) return _fallbackStoreDetails;
+      final details = ReceiptStoreDetails.fromResponse(response);
+      if (!details.isComplete) return _fallbackStoreDetails;
+      _cachedStoreDetails = details;
+      return details;
+    } catch (_) {
+      // Store metadata must not prevent an otherwise valid bill from printing.
+      return _fallbackStoreDetails;
+    }
+  }
 
   Future<bool> get isConnected async {
     try {
@@ -158,6 +245,7 @@ class ReceiptPrinterService {
     double discount = 0,
     double charge = 0,
     required double total,
+    double roundOff = 0,
     required String paymentMethod,
     required String orderNumber,
     required ReceiptPaperSize paperSize,
@@ -181,6 +269,7 @@ class ReceiptPrinterService {
       discount: discount,
       charge: charge,
       total: total,
+      roundOff: roundOff,
       paymentMethod: paymentMethod,
       orderNumber: orderNumber,
       paperSize: paperSize,
@@ -237,6 +326,7 @@ class ReceiptPrinterService {
     double discount = 0,
     double charge = 0,
     required double total,
+    double roundOff = 0,
     required String paymentMethod,
     required String orderNumber,
     required ReceiptPaperSize paperSize,
@@ -261,6 +351,7 @@ class ReceiptPrinterService {
     );
     final charactersPerLine = paperSize == ReceiptPaperSize.mm58 ? 32 : 48;
     final now = DateTime.now();
+    final storeDetails = await _getStoreDetails();
     final date =
         '${_twoDigits(now.month)}/${_twoDigits(now.day)}/${now.year} '
         '${_twelveHour(now.hour)}:${_twoDigits(now.minute)} '
@@ -281,7 +372,7 @@ class ReceiptPrinterService {
     bytes.addAll(generator.feed(1));
     bytes.addAll(
       generator.text(
-        'Vettturnimadam, Nagercoil',
+        storeDetails.place,
         styles: const PosStyles(
           align: PosAlign.center,
           fontType: PosFontType.fontA,
@@ -291,7 +382,7 @@ class ReceiptPrinterService {
     );
     bytes.addAll(
       generator.text(
-        '- 629001  CELL: 7339595793',
+        '- ${storeDetails.pincode}  CELL: ${storeDetails.cell}',
         styles: const PosStyles(
           align: PosAlign.center,
           fontType: PosFontType.fontB,
@@ -484,6 +575,7 @@ class ReceiptPrinterService {
       spaceBetweenRows: 0,
     );
     final now = DateTime.now();
+    final storeDetails = await _getStoreDetails();
     final date =
         '${_twoDigits(now.month)}/${_twoDigits(now.day)}/${now.year} '
         '${_twelveHour(now.hour)}:${_twoDigits(now.minute)} '
@@ -501,7 +593,7 @@ class ReceiptPrinterService {
     bytes.addAll(generator.feed(1));
     bytes.addAll(
       generator.text(
-        'Vettturnimadam, Nagercoil - 629001',
+        '${storeDetails.place} - ${storeDetails.pincode}',
         styles: const PosStyles(
           align: PosAlign.center,
           fontType: PosFontType.fontB,
@@ -511,7 +603,7 @@ class ReceiptPrinterService {
     );
     bytes.addAll(
       generator.text(
-        'CELL:7339595793',
+        'CELL:${storeDetails.cell}',
         styles: const PosStyles(
           align: PosAlign.center,
           fontType: PosFontType.fontB,

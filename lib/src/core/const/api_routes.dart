@@ -1,13 +1,15 @@
 class ApiRoutes {
   ApiRoutes._();
 
-  static const baseUrl = 'http://64.227.170.206/iyangarbakery.com/public/api/';
-  // static const baseUrl =
-  //     'http://64.227.170.206/pickmysnacks_billing/public/api/';
+  static const baseUrl =
+      'http://64.227.170.206/pickmysnacks_billing/public/api/';
+
+      // 'http://64.227.170.206/iyangarbakery.com/public/api';
 
   static String categoryProducts(int id) => 'get_category_products/$id';
   static const categories = 'get_categories';
   static const products = 'get_product';
+  static const storeDetails = 'get_store_details';
   static const lowStockProducts = 'lowStockProducts';
   static const outOfStockProducts = 'outOfStockProducts';
   static const notificationCount = 'notificationCount';
@@ -28,6 +30,8 @@ class ApiRoutes {
       'kot_delete_person/$tableId/${Uri.encodeComponent(personId)}';
   static const takeAwayHold = 'take_away_hold';
   static const takeAwaySaveOrder = 'take_away_save_order';
+  static const takeAwayRemoveProduct = 'take_away_remove_product';
+  static const takeAwayChangeQuantity = 'take_away_change_quantity';
   static const takeAwayProcessing = 'take_away_processing';
   static String takeAwayProcessingView(int holdOrderId) =>
       'take_away_processing_view/$holdOrderId';

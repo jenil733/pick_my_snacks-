@@ -89,6 +89,8 @@ class TakeAwayProcessingOrder {
 
 class TakeAwayProcessingProduct {
   const TakeAwayProcessingProduct({
+    this.id,
+    this.orderId,
     this.productId,
     this.productName,
     this.quantity,
@@ -99,6 +101,8 @@ class TakeAwayProcessingProduct {
 
   factory TakeAwayProcessingProduct.fromJson(Map<String, dynamic> json) {
     return TakeAwayProcessingProduct(
+      id: _toInt(json['id'] ?? json['detail_id']),
+      orderId: _toInt(json['order_id'] ?? json['hold_order_id']),
       productId: _toInt(json['product_id']),
       productName: (json['product_name'] ?? json['name'])?.toString(),
       quantity: (json['quantity'] ?? json['qty'])?.toString(),
@@ -108,6 +112,8 @@ class TakeAwayProcessingProduct {
     );
   }
 
+  final int? id;
+  final int? orderId;
   final int? productId;
   final String? productName;
   final String? quantity;

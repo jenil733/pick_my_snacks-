@@ -26,6 +26,7 @@ import 'package:pick_my_snacks/src/data/model/hold_order.dart';
 
 import 'package:pick_my_snacks/src/data/model/save_order.dart';
 import 'package:pick_my_snacks/src/data/model/take_away_hold.dart';
+import 'package:pick_my_snacks/src/data/model/take_away_change_quantity.dart';
 import 'package:pick_my_snacks/src/data/model/take_away_processing.dart';
 import 'package:pick_my_snacks/src/data/model/take_away_save_order.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_products_usecase.dart';
@@ -51,6 +52,8 @@ import 'package:pick_my_snacks/src/domain/usecase/remove_kot_product_usecase.dar
 import 'package:pick_my_snacks/src/domain/usecase/remove_kot_quantity_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/take_away_hold_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/take_away_change_quantity_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/take_away_remove_product_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/take_away_save_order_usecase.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/cart_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
@@ -431,6 +434,14 @@ class HomeController extends GetxController {
   final RemoveKotQuantityUseCase? _removeKotQuantityUseCase;
   final TakeAwayHoldUseCase? _takeAwayHoldUseCase;
   final TakeAwaySaveOrderUseCase? _takeAwaySaveOrderUseCase;
+  TakeAwayRemoveProductUseCase? get _takeAwayRemoveProductUseCase =>
+      Get.isRegistered<TakeAwayRemoveProductUseCase>()
+      ? Get.find<TakeAwayRemoveProductUseCase>()
+      : null;
+  TakeAwayChangeQuantityUseCase? get _takeAwayChangeQuantityUseCase =>
+      Get.isRegistered<TakeAwayChangeQuantityUseCase>()
+      ? Get.find<TakeAwayChangeQuantityUseCase>()
+      : null;
   final GetTakeAwayProcessingUseCase? _getTakeAwayProcessingUseCase;
   final GetTakeAwayCompletedUseCase? _getTakeAwayCompletedUseCase;
   final GetTakeAwayCompletedViewUseCase? _getTakeAwayCompletedViewUseCase;
@@ -498,9 +509,11 @@ class HomeController extends GetxController {
   final takeAwayCustomerPhone = ''.obs;
   final isCustomerDetailsPrompted = false.obs;
   final takeAwayHoldOrderId = RxnInt();
+  final takeAwayHoldOrderIds = <int>[].obs;
   final isSavingTakeAwayOrder = false.obs;
   final takeAwaySaveOrderError = RxnString();
   final isTakeAwayOrderCompleted = false.obs;
+  final completedTakeAwayOrder = Rxn<SavedOrder>();
   final takeAwayProcessingOrders = <TakeAwayProcessingOrder>[].obs;
   final completedTakeAwayOrders = <TakeAwayProcessingOrder>[].obs;
   final pendingTakeAwayHoldIds = <int>{}.obs;
@@ -1070,8 +1083,8 @@ class HomeController extends GetxController {
               final key = resolvedProduct.id > 0
                   ? 'id:${resolvedProduct.id}'
                   : resolvedProduct.productId.isNotEmpty
-                      ? 'code:${resolvedProduct.productId}'
-                      : 'name:${resolvedProduct.name.toLowerCase()}';
+                  ? 'code:${resolvedProduct.productId}'
+                  : 'name:${resolvedProduct.name.toLowerCase()}';
 
               final itemQty = item.quantity ?? 1;
               final ref = KotProductReference(
@@ -2374,20 +2387,19 @@ class HomeController extends GetxController {
 
   double get discountAmount => _discountFor(subtotal, tax);
 
-  /// Values derived from the rows currently displayed in the cart. Receipt
-  /// printing uses these so partial backend totals are not mixed with the full
-  /// local item list.
-  double get cartItemsSubtotal => cart.fold(
-    0,
-    (sum, item) =>
-        sum +
-        (flow.value == PosFlow.categoryBilling
-            ? item.subtotalBeforeGst
-            : item.total),
-  );
-  double get cartItemsDiscountAmount => _discountFor(cartItemsSubtotal, tax);
+  /// Values derived only from the rows currently displayed in the cart.
+  /// Receipt printing uses these so a partial backend response is never mixed
+  /// with the complete local item list.
+  double get cartItemsSubtotal =>
+      cart.fold(0, (sum, item) => sum + item.subtotalBeforeGst);
+  double get cartItemsTax => cart.fold(0, (sum, item) => sum + item.gstAmount);
+  double get cartItemsDiscountAmount =>
+      _discountFor(cartItemsSubtotal, cartItemsTax);
   double get cartItemsTotal =>
-      (cartItemsSubtotal + tax - cartItemsDiscountAmount + chargeAmount.value)
+      (cartItemsSubtotal +
+              cartItemsTax -
+              cartItemsDiscountAmount +
+              chargeAmount.value)
           .clamp(0, double.infinity)
           .toDouble();
 
@@ -2743,27 +2755,41 @@ class HomeController extends GetxController {
     final holdOrderId = order.holdOrderId ?? order.id;
     if (holdOrderId == null) return;
     startNewBill();
-    final items = order.products.map((item) {
-      final quantity = double.tryParse(item.quantity ?? '') ?? 1;
-      final unit = item.unit?.trim() ?? '';
+    final items = order.products.map((productItem) {
+      final quantity = double.tryParse(productItem.quantity ?? '') ?? 1;
+      final unit = productItem.unit?.trim() ?? '';
       final isWeighted = _isKilogramUnit(unit);
-      return CartItem(
+      final cartItem = CartItem(
         product: Product(
-          id: item.productId ?? 0,
-          name: item.productName?.trim().isNotEmpty == true
-              ? item.productName!.trim()
-              : 'Product ${item.productId ?? '-'}',
+          id: productItem.productId ?? 0,
+          name: productItem.productName?.trim().isNotEmpty == true
+              ? productItem.productName!.trim()
+              : 'Product ${productItem.productId ?? '-'}',
           unit: unit,
-          price: item.price ?? 0,
+          price: productItem.price ?? 0,
           image: AppImages.defaultProduct,
         ),
         quantity: isWeighted ? 1 : quantity.round(),
         manualWeightKg: isWeighted ? quantity : null,
       );
+      final detailId = productItem.id;
+      final productOrderId = productItem.orderId ?? holdOrderId;
+      if (detailId != null) {
+        cartItem.kotProductReferences.add(
+          KotProductReference(
+            orderId: productOrderId,
+            detailId: detailId,
+            quantity: quantity,
+          ),
+        );
+        cartItem.sentKitchenQuantity = cartItem.quantity;
+      }
+      return cartItem;
     }).toList();
     cart.assignAll(items);
     cart.refresh();
     takeAwayHoldOrderId.value = holdOrderId;
+    takeAwayHoldOrderIds.assignAll(<int>[holdOrderId]);
     pendingTakeAwayHoldIds.add(holdOrderId);
     savedOrderNumber.value = order.orderId;
     takeAwayCustomerName.value = order.customerName ?? '';
@@ -2801,9 +2827,13 @@ class HomeController extends GetxController {
     isSavingTakeAwayOrder.value = true;
     completingPendingTakeAwayOrderId.value = targetId;
     takeAwaySaveOrderError.value = null;
+    completedTakeAwayOrder.value = null;
     try {
+      final targetIds = completesCurrentOrder && takeAwayHoldOrderIds.isNotEmpty
+          ? List<int>.from(takeAwayHoldOrderIds)
+          : <int>[targetId];
       final response = await useCase(
-        TakeAwaySaveOrderRequest(holdOrderId: targetId),
+        TakeAwaySaveOrderRequest(holdOrderIds: targetIds),
       );
       if (response.status == false) {
         takeAwaySaveOrderError.value =
@@ -2811,20 +2841,35 @@ class HomeController extends GetxController {
         return false;
       }
       final finalOrder = response.order;
-      final orderNumber = finalOrder?.orderId?.trim();
+      final receiptOrder = SavedOrder(
+        id: finalOrder?.id,
+        orderId: finalOrder?.orderId ?? savedOrderNumber.value,
+        subtotal: finalOrder?.subtotal ?? backendSubtotal.value ?? 0,
+        gst: finalOrder?.gst ?? backendGst.value ?? 0,
+        discountType: finalOrder?.discountType,
+        discountValue: finalOrder?.discountValue,
+        discountAmount: finalOrder?.discountAmount ?? 0,
+        charge: finalOrder?.charge ?? 0,
+        total: finalOrder?.total ?? backendTotal.value ?? 0,
+        paymentMode: finalOrder?.paymentMode ?? paymentMethod.value,
+        status: finalOrder?.status ?? 'completed',
+        products: finalOrder?.products,
+      );
+      completedTakeAwayOrder.value = receiptOrder;
+      final orderNumber = receiptOrder.orderId?.trim();
       if (orderNumber != null && orderNumber.isNotEmpty) {
         savedOrderNumber.value = orderNumber;
       }
-      backendSubtotal.value = finalOrder?.subtotal ?? backendSubtotal.value;
-      backendGst.value = finalOrder?.gst ?? backendGst.value;
-      backendTotal.value = finalOrder?.total ?? backendTotal.value;
+      backendSubtotal.value = receiptOrder.subtotal;
+      backendGst.value = receiptOrder.gst;
+      backendTotal.value = receiptOrder.total;
       completedTakeAwayOrders.insert(
         0,
         TakeAwayProcessingOrder(
-          id: finalOrder?.id ?? pendingOrder?.id ?? targetId,
+          id: receiptOrder.id ?? pendingOrder?.id ?? targetId,
           holdOrderId: pendingOrder?.holdOrderId ?? targetId,
           orderId:
-              finalOrder?.orderId ??
+              receiptOrder.orderId ??
               pendingOrder?.orderId ??
               savedOrderNumber.value,
           customerName:
@@ -2832,8 +2877,8 @@ class HomeController extends GetxController {
           customerPhone:
               pendingOrder?.customerPhone ?? takeAwayCustomerPhone.value,
           staffName: pendingOrder?.staffName,
-          status: finalOrder?.status ?? 'completed',
-          total: finalOrder?.total ?? backendTotal.value,
+          status: receiptOrder.status ?? 'completed',
+          total: receiptOrder.total,
           products:
               pendingOrder?.products ??
               cart
@@ -2848,15 +2893,15 @@ class HomeController extends GetxController {
                   .toList(),
         ),
       );
-      pendingTakeAwayHoldIds.remove(targetId);
-      completedTakeAwayHoldIds.add(targetId);
+      pendingTakeAwayHoldIds.removeAll(targetIds);
+      completedTakeAwayHoldIds.addAll(targetIds);
       takeAwayProcessingOrders.removeWhere(
-        (order) => (order.holdOrderId ?? order.id) == targetId,
+        (order) => targetIds.contains(order.holdOrderId ?? order.id),
       );
       _takeAwaySentQuantities.clear();
       if (completesCurrentOrder) isTakeAwayOrderCompleted.value = true;
       log(
-        'Take-away order completed from hold $targetId.',
+        'Take-away order completed from holds $targetIds.',
         name: 'TakeAwaySaveOrderController',
       );
       return true;
@@ -2882,6 +2927,42 @@ class HomeController extends GetxController {
       isSavingTakeAwayOrder.value = false;
       completingPendingTakeAwayOrderId.value = null;
     }
+  }
+
+  List<CartItem> get completedTakeAwayReceiptItems {
+    final products = completedTakeAwayOrder.value?.products;
+    if (products == null || products.isEmpty) {
+      return cart.map((item) => item.copy()).toList();
+    }
+
+    return products.map((item) {
+      final quantity = item.quantity ?? 1;
+      final safeQuantity = quantity > 0 ? quantity : 1;
+      final rowTotal = item.rowTotal;
+      final backendRate =
+          item.price ??
+          item.mrp ??
+          (rowTotal == null ? 0 : rowTotal / safeQuantity);
+      final unitValue = item.unitValue;
+      final unit = item.unit?.trim() ?? '';
+      final displayUnit = unitValue == null
+          ? unit
+          : '${_formatBackendNumber(unitValue)}$unit';
+      return CartItem(
+        product: Product(
+          id: item.productId ?? item.id ?? 0,
+          productId: item.productCode ?? '',
+          name: item.productName?.trim().isNotEmpty == true
+              ? item.productName!.trim()
+              : 'Unnamed product',
+          unit: displayUnit,
+          price: backendRate,
+          image: '',
+        ),
+        quantity: safeQuantity,
+        backendRowTotal: rowTotal,
+      );
+    }).toList();
   }
 
   Future<bool> saveKitchenOrder({
@@ -3096,16 +3177,14 @@ class HomeController extends GetxController {
       return false;
     }
 
-    final kitchenSelectedItems = cart
-        .where(isKitchenItemSelected)
-        .toList(growable: false);
-    final pendingItems = selectedOnly
-        ? kitchenSelectedItems
-        : cart.toList(growable: false);
+    final existingHoldId = takeAwayHoldOrderId.value;
+    final pendingItems = existingHoldId == null
+        ? cart.map((item) => item.copy()).toList(growable: false)
+        : takeAwayPendingKitchenItems;
     if (pendingItems.isEmpty) {
-      takeAwayHoldError.value = selectedOnly
-          ? 'Select at least one product for the Kitchen Bill.'
-          : 'Add at least one product to the take-away order.';
+      takeAwayHoldError.value = takeAwayHoldOrderId.value == null
+          ? 'Add at least one product to the take-away order.'
+          : 'There are no new take-away items or quantities to send.';
       return false;
     }
 
@@ -3115,6 +3194,7 @@ class HomeController extends GetxController {
       final response = await useCase(
         TakeAwayHoldRequest(
           staffId: staffId,
+          holdOrderId: existingHoldId,
           customerName: takeAwayCustomerName.value,
           customerPhone: takeAwayCustomerPhone.value,
           paymentMode: paymentMethod.value,
@@ -3130,11 +3210,9 @@ class HomeController extends GetxController {
                   unitValue: item.apiUnitValue,
                   unit: item.apiUnit,
                   note: item.notes.trim(),
-                  isKot: markAsKitchen
-                      ? true
-                      : kitchenSelectedItems.any(
-                          (selected) => selected.uniqueId == item.uniqueId,
-                        ),
+                  // The take-away API treats 0 as a new row waiting for its
+                  // kitchen print. It changes the print metadata server-side.
+                  isKot: false,
                 ),
               )
               .toList(),
@@ -3150,25 +3228,72 @@ class HomeController extends GetxController {
         return false;
       }
 
-      final pendingToPrint = takeAwayPendingKitchenItems;
-
-      savedOrderNumber.value = orderNumber;
-      final holdId = order?.id;
+      if (existingHoldId == null || savedOrderNumber.value == null) {
+        savedOrderNumber.value = orderNumber;
+      }
+      // Keep the first hold as the active update ID, while retaining every
+      // backend-returned hold ID for the final close-bill request.
+      final responseHoldId = order?.id;
+      final holdId = existingHoldId ?? responseHoldId;
       takeAwayHoldOrderId.value = holdId;
-      if (holdId != null) pendingTakeAwayHoldIds.add(holdId);
+      if (holdId != null && !takeAwayHoldOrderIds.contains(holdId)) {
+        takeAwayHoldOrderIds.add(holdId);
+      }
+      if (responseHoldId != null &&
+          !takeAwayHoldOrderIds.contains(responseHoldId)) {
+        takeAwayHoldOrderIds.add(responseHoldId);
+      }
+      pendingTakeAwayHoldIds.addAll(takeAwayHoldOrderIds);
       isTakeAwayOrderCompleted.value = false;
       backendSubtotal.value = order?.subtotal;
       backendGst.value = order?.gst;
       backendTotal.value = order?.total;
 
-      for (final item in pendingToPrint) {
+      for (final item in pendingItems) {
         final currentSent = _takeAwaySentQuantities[item.uniqueId] ?? 0;
         _takeAwaySentQuantities[item.uniqueId] = currentSent + item.quantity;
       }
 
-      lastKitchenOrderItems.assignAll(
-        pendingToPrint.map((item) => item.copy()),
+      final responseProducts = List<TakeAwayHoldProduct>.from(
+        order?.products ?? const <TakeAwayHoldProduct>[],
       );
+      for (final pendingItem in pendingItems) {
+        final cartItem = cart.firstWhereOrNull(
+          (item) => item.uniqueId == pendingItem.uniqueId,
+        );
+        if (cartItem == null) continue;
+        final responseIndex = responseProducts.indexWhere(
+          (product) =>
+              product.productId == pendingItem.product.id &&
+              product.id != null &&
+              !cartItem.kotProductReferences.any(
+                (reference) => reference.detailId == product.id,
+              ),
+        );
+        if (responseIndex >= 0) {
+          final product = responseProducts.removeAt(responseIndex);
+          final productOrderId = product.orderId ?? responseHoldId;
+          if (productOrderId != null) {
+            cartItem.kotProductReferences.add(
+              KotProductReference(
+                orderId: productOrderId,
+                detailId: product.id,
+                quantity: product.quantity,
+              ),
+            );
+          }
+        }
+        cartItem.sentKitchenQuantity =
+            _takeAwaySentQuantities[cartItem.uniqueId];
+      }
+
+      if (printKitchen) {
+        lastKitchenOrderItems.assignAll(
+          pendingItems.map((item) => item.copy()),
+        );
+      } else {
+        lastKitchenOrderItems.clear();
+      }
       log(
         'Take-away kitchen bill saved. Order ID: $orderNumber',
         name: 'TakeAwayHoldController',
@@ -3200,6 +3325,11 @@ class HomeController extends GetxController {
   Future<bool> prepareTakeAwayOrderForCompletion({
     required int? staffId,
   }) async {
+    // Do not submit an already printed hold again with `print_kitchen: 0`.
+    // That follow-up request can clear the backend product print metadata.
+    if (takeAwayHoldOrderId.value != null && !hasTakeAwayPendingKitchenItems) {
+      return true;
+    }
     return saveTakeAwayKitchenBill(
       staffId: staffId,
       selectedOnly: false,
@@ -3266,7 +3396,6 @@ class HomeController extends GetxController {
   List<CartItem> get takeAwayPendingKitchenItems {
     return cart
         .map((item) {
-          if (!isKitchenItemSelected(item)) return null;
           final pendingQuantity =
               item.quantity - (_takeAwaySentQuantities[item.uniqueId] ?? 0);
           if (pendingQuantity <= 0) return null;
@@ -3278,6 +3407,11 @@ class HomeController extends GetxController {
 
   bool get hasTakeAwayPendingKitchenItems =>
       takeAwayPendingKitchenItems.isNotEmpty;
+
+  bool get canSendTakeAwayKitchenBill =>
+      cart.isNotEmpty &&
+      !isSavingTakeAwayHold.value &&
+      hasTakeAwayPendingKitchenItems;
 
   List<CartItem> _pendingKitchenItems({bool selectedOnly = false}) {
     final tableId = activeTableNumber.value;
@@ -4020,9 +4154,7 @@ class HomeController extends GetxController {
   void addProduct(Product product) {
     if (_rejectLockedTakeAwayCartEdit()) return;
     final index = cart.indexWhere(
-      (item) =>
-          item.product.id == product.id &&
-          item.scannedWeightCode == null,
+      (item) => item.product.id == product.id && item.scannedWeightCode == null,
     );
     if (index < 0) {
       final item = CartItem(product: product);
@@ -4075,8 +4207,7 @@ class HomeController extends GetxController {
     }
     final index = cart.indexWhere(
       (item) =>
-          item.product.id == product.id &&
-          item.scannedWeightCode == weightCode,
+          item.product.id == product.id && item.scannedWeightCode == weightCode,
     );
     if (index >= 0) {
       cart[index].quantity++;
@@ -4130,7 +4261,10 @@ class HomeController extends GetxController {
     removeKotQuantityError.value = null;
 
     if (item.kotProductReferences.isEmpty) {
-      _decrementLocal(item);
+      _decrementLocal(
+        item,
+        weightStep: flow.value == PosFlow.takeAway ? 1 : 0.1,
+      );
       log(
         'Decremented unsaved product ${item.product.id} in local state.',
         name: 'RemoveKotQuantityController',
@@ -4157,7 +4291,7 @@ class HomeController extends GetxController {
 
     final removesCompleteProduct = item.effectiveWeightKg == null
         ? item.quantity <= 1
-        : item.editableAmount <= 0.1;
+        : item.editableAmount <= (flow.value == PosFlow.takeAway ? 1 : 0.1);
     if (removesCompleteProduct) {
       final removed = await removeKotProduct(item);
       if (!removed) {
@@ -4165,6 +4299,18 @@ class HomeController extends GetxController {
             removeKotProductError.value ?? 'Unable to remove the product.';
       }
       return removed;
+    }
+
+    if (flow.value == PosFlow.takeAway) {
+      final updatedAmount = item.effectiveWeightKg == null
+          ? item.quantity - 1.0
+          : item.editableAmount - 1.0;
+      final error = await applyItemAmount(item, updatedAmount);
+      if (error != null) {
+        removeKotQuantityError.value = error;
+        return false;
+      }
+      return true;
     }
 
     final reference = item.kotProductReferences.last;
@@ -4355,9 +4501,13 @@ class HomeController extends GetxController {
     }
   }
 
-  void _decrementLocal(CartItem item, {bool syncTotals = true}) {
+  void _decrementLocal(
+    CartItem item, {
+    bool syncTotals = true,
+    double weightStep = 0.1,
+  }) {
     if (item.effectiveWeightKg != null) {
-      final updatedWeight = item.editableAmount - 0.1;
+      final updatedWeight = item.editableAmount - weightStep;
       if (updatedWeight <= 0) {
         kitchenSelectedItems.remove(item);
         cart.remove(item);
@@ -4405,10 +4555,13 @@ class HomeController extends GetxController {
       return false;
     }
 
-    final useCase = _removeKotProductUseCase;
-    if (useCase == null) {
+    final isTakeAwayRemoval = flow.value == PosFlow.takeAway;
+    final removeProduct = isTakeAwayRemoval
+        ? _takeAwayRemoveProductUseCase?.call
+        : _removeKotProductUseCase?.call;
+    if (removeProduct == null) {
       removeKotProductError.value =
-          'Kitchen product removal service is unavailable.';
+          '${isTakeAwayRemoval ? 'Take-away' : 'Kitchen'} product removal service is unavailable.';
       return false;
     }
 
@@ -4432,11 +4585,11 @@ class HomeController extends GetxController {
       bool networkError = false;
       for (final reference in references) {
         try {
-          final response = await useCase(
+          final response = await removeProduct(
             RemoveKotProductRequest(
               orderId: reference.orderId,
               detailId: reference.detailId!,
-              personId: personId,
+              personId: isTakeAwayRemoval ? null : personId,
             ),
           );
           // Only remove the reference if the API successfully processes it.
@@ -4444,6 +4597,11 @@ class HomeController extends GetxController {
           // we still proceed because the end goal is to remove it locally anyway.
           if (response.status == true) {
             item.kotProductReferences.remove(reference);
+          } else if (isTakeAwayRemoval) {
+            networkError = true;
+            removeKotProductError.value =
+                response.message ?? 'Unable to remove the take-away product.';
+            break;
           }
         } on DioException catch (error) {
           networkError = true;
@@ -4481,6 +4639,9 @@ class HomeController extends GetxController {
   }
 
   void _removeKotProductLocally(CartItem item) {
+    if (flow.value == PosFlow.takeAway) {
+      _takeAwaySentQuantities.remove(item.uniqueId);
+    }
     kitchenSelectedItems.remove(item);
     cart.remove(item);
     _queueOrderTotalsSync();
@@ -4488,11 +4649,91 @@ class HomeController extends GetxController {
 
   String? setItemAmount(CartItem item, double amount) {
     if (_rejectLockedTakeAwayCartEdit()) return takeAwayCartLockedMessage;
+    final validationError = _itemAmountValidationError(item, amount);
+    if (validationError != null) return validationError;
+    _setItemAmountLocally(item, amount);
+    return null;
+  }
+
+  Future<String?> applyItemAmount(CartItem item, double amount) async {
+    if (_rejectLockedTakeAwayCartEdit()) return takeAwayCartLockedMessage;
+    final validationError = _itemAmountValidationError(item, amount);
+    if (validationError != null) return validationError;
+    if (flow.value != PosFlow.takeAway || item.kotProductReferences.isEmpty) {
+      _setItemAmountLocally(item, amount);
+      return null;
+    }
+
+    final currentAmount = item.editableAmount;
+    if (amount == currentAmount) return null;
+    if (amount > currentAmount) {
+      _setItemAmountLocally(item, amount);
+      return null;
+    }
+
+    final quantityToRemove = currentAmount - amount;
+
+    final reference = item.kotProductReferences.last;
+    final detailId = reference.detailId;
+    if (detailId == null) {
+      return 'The saved product detail is unavailable. Refresh and try again.';
+    }
+    final useCase = _takeAwayChangeQuantityUseCase;
+    if (useCase == null) {
+      return 'Take-away quantity change service is unavailable.';
+    }
+
+    try {
+      final response = await useCase(
+        TakeAwayChangeQuantityRequest(
+          orderId: reference.orderId,
+          detailId: detailId,
+          removeQuantity: quantityToRemove == quantityToRemove.roundToDouble()
+              ? quantityToRemove.toInt()
+              : double.parse(quantityToRemove.toStringAsFixed(3)),
+        ),
+      );
+      if (response.status == false) {
+        return response.message ?? 'Unable to change the take-away quantity.';
+      }
+      _setItemAmountLocally(item, amount);
+      final referenceIndex = item.kotProductReferences.indexOf(reference);
+      if (referenceIndex >= 0) {
+        item.kotProductReferences[referenceIndex] = KotProductReference(
+          orderId: reference.orderId,
+          detailId: reference.detailId,
+          quantity: amount,
+        );
+      }
+      _takeAwaySentQuantities[item.uniqueId] = item.quantity;
+      final order = response.data?.order;
+      backendSubtotal.value = order?.subtotal ?? backendSubtotal.value;
+      backendGst.value = order?.gst ?? backendGst.value;
+      backendTotal.value = order?.total ?? backendTotal.value;
+      return null;
+    } on DioException catch (error) {
+      return _saveOrderApiError(error);
+    } catch (error, stackTrace) {
+      log(
+        'Unexpected take-away quantity-change error',
+        name: 'TakeAwayChangeQuantityController',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return 'Unable to change the take-away quantity. Please try again.';
+    }
+  }
+
+  String? _itemAmountValidationError(CartItem item, double amount) {
     final isWholeNumber = amount == amount.roundToDouble();
     if (!_usesKilogramWeight(item) && !isWholeNumber) {
       final unit = item.apiUnit.isEmpty ? 'pcs' : item.apiUnit;
       return 'Enter a whole-number quantity for $unit.';
     }
+    return null;
+  }
+
+  void _setItemAmountLocally(CartItem item, double amount) {
     final oldKey = item.uniqueId;
     final oldQuantity = item.quantity;
     if (!_usesKilogramWeight(item)) {
@@ -4508,7 +4749,6 @@ class HomeController extends GetxController {
     }
     cart.refresh();
     _queueOrderTotalsSync();
-    return null;
   }
 
   void _markSentKitchenItemChanged(CartItem item, {String? key}) {
@@ -4541,7 +4781,13 @@ class HomeController extends GetxController {
 
   static bool _isKilogramUnit(String? value) {
     final unit = value?.trim().toLowerCase() ?? '';
-    return unit == 'kg' || unit.contains('kilo');
+    return unit == 'kg' ||
+        unit == 'kgs' ||
+        unit.contains('kilo') ||
+        unit == 'g' ||
+        unit == 'gm' ||
+        unit == 'gms' ||
+        unit.contains('gram');
   }
 
   void clearCart() {
@@ -4569,9 +4815,11 @@ class HomeController extends GetxController {
     takeAwayCustomerPhone.value = '';
     isCustomerDetailsPrompted.value = false;
     takeAwayHoldOrderId.value = null;
+    takeAwayHoldOrderIds.clear();
     _takeAwaySentQuantities.clear();
     takeAwaySaveOrderError.value = null;
     isTakeAwayOrderCompleted.value = false;
+    completedTakeAwayOrder.value = null;
     takeAwayProcessingOrders.clear();
     takeAwayProcessingError.value = null;
     searchController.clear();

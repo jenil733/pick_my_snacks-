@@ -1,12 +1,13 @@
 import 'package:pick_my_snacks/src/data/model/save_order.dart';
 
 class TakeAwaySaveOrderRequest {
-  const TakeAwaySaveOrderRequest({required this.holdOrderId});
+  const TakeAwaySaveOrderRequest({required this.holdOrderIds});
 
-  final int holdOrderId;
+  final List<int> holdOrderIds;
 
   Map<String, dynamic> toFormFields() => <String, dynamic>{
-    'hold_order_id': holdOrderId,
+    for (var index = 0; index < holdOrderIds.length; index++)
+      'hold_order_ids[$index]': holdOrderIds[index],
   };
 }
 

@@ -11,6 +11,58 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'receipt header uses only place, pincode, and cell from backend',
+    () async {
+      var requestCount = 0;
+      final service = ReceiptPrinterService(
+        storeDetailsLoader: () async {
+          requestCount++;
+          return <String, dynamic>{
+            'status': true,
+            'data': <String, dynamic>{
+              'store_name': 'Not printed',
+              'address': 'Backend Place , Nagercoil - 600001',
+              'pincode': '600001',
+              'gstin': 'GST-NOT-PRINTED',
+              'cell': '9000000000',
+              'email': 'not-printed@example.com',
+            },
+          };
+        },
+      );
+
+      final receipt = String.fromCharCodes(
+        await service.buildReceiptBytes(
+          items: const [],
+          subtotal: 0,
+          tax: 0,
+          total: 0,
+          paymentMethod: 'cash',
+          orderNumber: 'TEST',
+          paperSize: ReceiptPaperSize.mm58,
+          showTotals: false,
+        ),
+      );
+      final duplicate = String.fromCharCodes(
+        await service.buildDuplicateBillBytes(
+          items: const [],
+          orderNumber: 'TEST',
+          paperSize: ReceiptPaperSize.mm58,
+        ),
+      );
+
+      expect(receipt, contains('Backend Place, Nagercoil'));
+      expect(receipt, contains('- 600001  CELL: 9000000000'));
+      expect(duplicate, contains('Backend Place, Nagercoil - 600001'));
+      expect(duplicate, contains('CELL:9000000000'));
+      expect(receipt, isNot(contains('Not printed')));
+      expect(receipt, isNot(contains('GST-NOT-PRINTED')));
+      expect(receipt, isNot(contains('not-printed@example.com')));
+      expect(requestCount, 1);
+    },
+  );
+
+  test(
     'stores billing, kitchen, and take away printers independently',
     () async {
       SharedPreferences.setMockInitialValues({});

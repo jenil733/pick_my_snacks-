@@ -47,6 +47,10 @@ class ReceiptPrintJob {
   final String? staffName;
   final String? customerName;
   final String? customerPhone;
+
+  double get roundedTotal => total.roundToDouble();
+
+  double get roundOff => roundedTotal - total;
 }
 
 class DuplicatePrintJob {
@@ -105,7 +109,8 @@ class PrinterManager {
         tax: job.tax,
         discount: job.discount,
         charge: job.charge,
-        total: job.total,
+        total: job.roundedTotal,
+        roundOff: job.roundOff,
         paymentMethod: job.paymentMethod,
         orderNumber: job.orderNumber,
         paperSize: job.paperSize,
@@ -129,7 +134,8 @@ class PrinterManager {
         tax: job.tax,
         discount: job.discount,
         charge: job.charge,
-        total: job.total,
+        total: job.roundedTotal,
+        roundOff: job.roundOff,
         paymentMethod: job.paymentMethod,
         orderNumber: job.orderNumber,
         paperSize: job.paperSize,
@@ -190,7 +196,7 @@ class PrinterManager {
     });
   }
 
-  void _logReceipt(String title, ReceiptPrintJob job) {
+  static String formatReceiptForConsole(String title, ReceiptPrintJob job) {
     final b = StringBuffer();
     b.writeln('========================================');
     b.writeln('           $title RECEIPT               ');
@@ -223,12 +229,20 @@ class PrinterManager {
     );
     b.writeln('Charge:                       ${job.charge.toStringAsFixed(2)}');
     b.writeln('----------------------------------------');
-    b.writeln('TOTAL:                        ${job.total.toStringAsFixed(2)}');
+    b.writeln(
+      'TOTAL:                        ${job.roundedTotal.toStringAsFixed(2)}',
+    );
     b.writeln('Payment: ${job.paymentMethod}');
     b.writeln('========================================');
-    log(b.toString());
+    return b.toString();
   }
 
+  static void printReceiptToConsole(String title, ReceiptPrintJob job) {
+    log(formatReceiptForConsole(title, job), name: 'ReceiptConsole');
+  }
+
+  // Kept for optional kitchen-ticket diagnostics.
+  // ignore: unused_element
   void _logKitchen(KitchenPrintJob job) {
     final b = StringBuffer();
     b.writeln('========================================');
@@ -259,6 +273,8 @@ class PrinterManager {
     log(b.toString());
   }
 
+  // Kept for optional duplicate-ticket diagnostics.
+  // ignore: unused_element
   void _logDuplicate(DuplicatePrintJob job) {
     final b = StringBuffer();
     b.writeln('========================================');

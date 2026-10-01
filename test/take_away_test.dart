@@ -6,23 +6,33 @@ import 'package:pick_my_snacks/src/core/const/api_routes.dart';
 import 'package:pick_my_snacks/src/core/services/api_services.dart';
 import 'package:pick_my_snacks/src/core/services/local_storage.dart';
 import 'package:pick_my_snacks/src/data/model/get_staff.dart';
+import 'package:pick_my_snacks/src/data/model/remove_kot_product.dart';
+import 'package:pick_my_snacks/src/data/model/remove_kot_quantity.dart';
 import 'package:pick_my_snacks/src/data/model/save_order.dart';
+import 'package:pick_my_snacks/src/data/model/take_away_change_quantity.dart';
 import 'package:pick_my_snacks/src/data/model/take_away_hold.dart';
 import 'package:pick_my_snacks/src/data/model/take_away_processing.dart';
 import 'package:pick_my_snacks/src/data/model/take_away_save_order.dart';
 import 'package:pick_my_snacks/src/data/repository/take_away_processing_repository_impl.dart';
+import 'package:pick_my_snacks/src/data/repository/take_away_change_quantity_repository_impl.dart';
+import 'package:pick_my_snacks/src/data/repository/take_away_remove_product_repository_impl.dart';
 import 'package:pick_my_snacks/src/domain/repository/order_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/take_away_completed_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/take_away_completed_view_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/take_away_hold_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/take_away_processing_repository.dart';
+import 'package:pick_my_snacks/src/domain/repository/take_away_change_quantity_repository.dart';
+import 'package:pick_my_snacks/src/domain/repository/take_away_remove_product_repository.dart';
 import 'package:pick_my_snacks/src/domain/repository/take_away_save_order_repository.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_take_away_completed_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_take_away_completed_view_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/get_take_away_processing_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/save_order_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/take_away_hold_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/take_away_change_quantity_usecase.dart';
+import 'package:pick_my_snacks/src/domain/usecase/take_away_remove_product_usecase.dart';
 import 'package:pick_my_snacks/src/domain/usecase/take_away_save_order_usecase.dart';
+import 'package:pick_my_snacks/src/presentation/controller/homescreen/cart_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/homescreen/home_controller.dart';
 import 'package:pick_my_snacks/src/presentation/controller/staff/staff_controller.dart';
 import 'package:pick_my_snacks/src/presentation/widgets/homescreen/bill_summary_panel.dart';
@@ -34,7 +44,97 @@ import 'package:pick_my_snacks/src/services/receipt_printer_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() => Get.put(CartController()));
   tearDown(Get.reset);
+
+  test('take-away quantity change posts the quantity to remove', () async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+    final storage = await LocalStorageService.initialize();
+    final dio = Dio();
+    RequestOptions? capturedRequest;
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          capturedRequest = options;
+          handler.resolve(
+            Response<Map<String, dynamic>>(
+              requestOptions: options,
+              statusCode: 200,
+              data: const <String, dynamic>{
+                'status': true,
+                'message': 'Quantity changed',
+              },
+            ),
+          );
+        },
+      ),
+    );
+    final repository = TakeAwayChangeQuantityRepositoryImpl(
+      ApiService(storage: storage, dio: dio),
+    );
+
+    final response = await repository.changeTakeAwayQuantity(
+      const TakeAwayChangeQuantityRequest(
+        orderId: 623,
+        detailId: 955,
+        removeQuantity: 0.5,
+      ),
+    );
+
+    expect(capturedRequest?.method, 'POST');
+    expect(capturedRequest?.path, ApiRoutes.takeAwayChangeQuantity);
+    final fields = Map<String, String>.fromEntries(
+      (capturedRequest?.data as FormData).fields,
+    );
+    expect(fields, <String, String>{
+      'order_id': '623',
+      'detail_id': '955',
+      'remove_quantity': '0.5',
+    });
+    expect(response.status, isTrue);
+  });
+
+  test(
+    'take-away removal posts order and detail IDs as multipart fields',
+    () async {
+      SharedPreferences.setMockInitialValues(const <String, Object>{});
+      final storage = await LocalStorageService.initialize();
+      final dio = Dio();
+      RequestOptions? capturedRequest;
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            capturedRequest = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const <String, dynamic>{
+                  'status': true,
+                  'message': 'Product removed',
+                },
+              ),
+            );
+          },
+        ),
+      );
+      final repository = TakeAwayRemoveProductRepositoryImpl(
+        ApiService(storage: storage, dio: dio),
+      );
+
+      final response = await repository.removeTakeAwayProduct(
+        const RemoveKotProductRequest(orderId: 614, detailId: 937),
+      );
+
+      expect(capturedRequest?.method, 'POST');
+      expect(capturedRequest?.path, ApiRoutes.takeAwayRemoveProduct);
+      final fields = Map<String, String>.fromEntries(
+        (capturedRequest?.data as FormData).fields,
+      );
+      expect(fields, <String, String>{'order_id': '614', 'detail_id': '937'});
+      expect(response.status, isTrue);
+    },
+  );
 
   test(
     'processing detail uses the view endpoint and multipart hold ID',
@@ -132,7 +232,7 @@ void main() {
       'user_id': '',
       'customer_name': 'test',
       'customer_phone': 'ans',
-      'charge': '',
+      'charge': 0.0,
       'payment_mode': 'cash',
       'status': '',
       'products[0][product_id]': 4,
@@ -142,16 +242,284 @@ void main() {
       'products[1][product_id]': 5,
       'products[1][qty]': '1pcs',
       'products[1][note]': '',
-      'products[1][is_kot]': 1,
+      'products[1][is_kot]': 0,
       'discount_type': '',
       'discount_value': '',
+      'discount': 0,
+      'offer': 0,
+      'print_kitchen': 1,
     });
   });
 
-  test('builds the take_away_save_order multipart fields', () {
-    const request = TakeAwaySaveOrderRequest(holdOrderId: 159);
+  test('parses the take away hold KOT response', () {
+    final response = TakeAwayHoldResponse.fromJson({
+      'status': true,
+      'message': 'take away order saved successfully.',
+      'data': {
+        'is_processing': 1,
+        'order': {
+          'id': 557,
+          'order_id': 'KOT10438',
+          'table_id': 0,
+          'branch_id': 1,
+          'staff_id': 3,
+          'customer_name': 'Printer Test',
+          'customer_phone': '9876543210',
+          'subtotal': 1070.52,
+          'gst': 49.37,
+          'discount': 0,
+          'charge': 0,
+          'total': 1119.89,
+          'payment_mode': 'cash',
+          'status': 'take_away_processing',
+          'billed_in': 'app',
+          'products': [
+            {
+              'id': 821,
+              'order_id': 557,
+              'product_id': 4,
+              'product_name': 'good day',
+              'product_code': '1003',
+              'variant_code': '1003',
+              'mrp': '10.00',
+              'price': '10.00',
+              'quantity': 2,
+              'note': 'Kitchen printer test',
+              'unit_value': '2',
+              'unit': 'pcs',
+              'tax': '4.00',
+              'row_total': '20.00',
+              'is_kot': '0',
+              'print_target': null,
+              'printed_at': null,
+              'created_at': '2026-09-30T09:22:47.000000Z',
+              'updated_at': '2026-09-30T09:22:47.000000Z',
+            },
+            {
+              'id': 823,
+              'order_id': 557,
+              'product_id': 1,
+              'product_name': 'black forest',
+              'quantity': 1,
+              'is_kot': '1',
+            },
+          ],
+        },
+      },
+    });
 
-    expect(request.toFormFields(), {'hold_order_id': 159});
+    expect(response.status, isTrue);
+    expect(response.data?.isProcessing, isTrue);
+    expect(response.data?.order?.id, 557);
+    expect(response.data?.order?.orderId, 'KOT10438');
+    expect(response.data?.order?.customerName, 'Printer Test');
+    expect(response.data?.order?.status, 'take_away_processing');
+    expect(response.data?.order?.products, hasLength(2));
+    expect(response.data?.order?.products.first.note, 'Kitchen printer test');
+    expect(response.data?.order?.products.first.isKot, isFalse);
+    expect(response.data?.order?.products.last.isKot, isTrue);
+    expect(response.data?.order?.products.first.printTarget, isNull);
+  });
+
+  test('builds the take_away_save_order multipart fields', () {
+    const request = TakeAwaySaveOrderRequest(holdOrderIds: [159, 160]);
+
+    expect(request.toFormFields(), {
+      'hold_order_ids[0]': 159,
+      'hold_order_ids[1]': 160,
+    });
+  });
+
+  test('accepts a decimal weight for a gram product', () {
+    final controller = HomeController()..selectFlow(PosFlow.takeAway);
+    controller.addProduct(
+      const Product(
+        id: 44,
+        name: 'Loose snack',
+        unit: 'gram',
+        price: 200,
+        image: '',
+      ),
+    );
+    final item = controller.cart.single;
+
+    final error = controller.setItemAmount(item, 0.5);
+
+    expect(error, isNull);
+    expect(item.manualWeightKg, 0.5);
+    expect(item.editableAmount, 0.5);
+    expect(item.apiUnit, 'kg');
+  });
+
+  test('saved take-away weight change calls the quantity API', () async {
+    final holdRepository = _FakeTakeAwayHoldRepository(
+      includeProductDetails: true,
+    );
+    final quantityRepository = _FakeTakeAwayChangeQuantityRepository();
+    Get.put(TakeAwayChangeQuantityUseCase(quantityRepository));
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      TakeAwayHoldUseCase(holdRepository),
+    )..selectFlow(PosFlow.takeAway);
+    controller.addProduct(
+      const Product(
+        id: 4,
+        name: 'Loose snack',
+        unit: 'gram',
+        price: 200,
+        image: '',
+      ),
+    );
+    controller.takeAwayCustomerName.value = 'Anu';
+    controller.takeAwayCustomerPhone.value = '9876543210';
+    expect(await controller.saveTakeAwayKitchenBill(staffId: 1), isTrue);
+    final item = controller.cart.single;
+
+    final error = await controller.applyItemAmount(item, 0.5);
+
+    expect(error, isNull);
+    expect(quantityRepository.requests, hasLength(1));
+    expect(quantityRepository.requests.single.orderId, 1001);
+    expect(quantityRepository.requests.single.detailId, 937);
+    expect(quantityRepository.requests.single.removeQuantity, 0.5);
+    expect(item.editableAmount, 0.5);
+  });
+
+  test('take-away minus button uses the change quantity API', () async {
+    final quantityRepository = _FakeTakeAwayChangeQuantityRepository();
+    Get.put(TakeAwayChangeQuantityUseCase(quantityRepository));
+    final controller = HomeController()..selectFlow(PosFlow.takeAway);
+    final item = CartItem(
+      product: const Product(
+        id: 4,
+        name: 'Burger',
+        unit: 'pcs',
+        price: 100,
+        image: '',
+      ),
+      quantity: 2,
+      sentKitchenQuantity: 2,
+      kotProductReferences: <KotProductReference>[
+        const KotProductReference(orderId: 622, detailId: 952, quantity: 2),
+      ],
+    );
+    controller.cart.add(item);
+
+    final decremented = await controller.decrement(item);
+    expect(
+      decremented,
+      isTrue,
+      reason: controller.removeKotQuantityError.value,
+    );
+
+    expect(quantityRepository.requests, hasLength(1));
+    expect(quantityRepository.requests.single.orderId, 622);
+    expect(quantityRepository.requests.single.detailId, 952);
+    expect(quantityRepository.requests.single.removeQuantity, 1);
+    expect(item.quantity, 1);
+  });
+
+  test('take-away minus subtracts one from a saved weight', () async {
+    final quantityRepository = _FakeTakeAwayChangeQuantityRepository();
+    Get.put(TakeAwayChangeQuantityUseCase(quantityRepository));
+    final controller = HomeController()..selectFlow(PosFlow.takeAway);
+    final item = CartItem(
+      product: const Product(
+        id: 4,
+        name: 'Loose snack',
+        unit: 'kg',
+        price: 100,
+        image: '',
+      ),
+      manualWeightKg: 3,
+      sentKitchenQuantity: 1,
+      kotProductReferences: <KotProductReference>[
+        const KotProductReference(orderId: 623, detailId: 955, quantity: 3),
+      ],
+    );
+    controller.cart.add(item);
+
+    final decremented = await controller.decrement(item);
+
+    expect(
+      decremented,
+      isTrue,
+      reason: controller.removeKotQuantityError.value,
+    );
+    expect(quantityRepository.requests, hasLength(1));
+    expect(quantityRepository.requests.single.removeQuantity, 1);
+    expect(item.editableAmount, 2);
+  });
+
+  test('take-away minus subtracts one from an unsaved weight', () async {
+    final controller = HomeController()..selectFlow(PosFlow.takeAway);
+    final item = CartItem(
+      product: const Product(
+        id: 4,
+        name: 'Loose snack',
+        unit: 'kg',
+        price: 100,
+        image: '',
+      ),
+      manualWeightKg: 3,
+    );
+    controller.cart.add(item);
+
+    expect(await controller.decrement(item), isTrue);
+    expect(item.editableAmount, 2);
+  });
+
+  test('removes a kitchen-sent take-away product with backend IDs', () async {
+    final holdRepository = _FakeTakeAwayHoldRepository(
+      includeProductDetails: true,
+    );
+    final removeRepository = _FakeTakeAwayRemoveProductRepository();
+    Get.put(TakeAwayRemoveProductUseCase(removeRepository));
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      TakeAwayHoldUseCase(holdRepository),
+    )..selectFlow(PosFlow.takeAway);
+    controller.addProduct(
+      const Product(id: 4, name: 'Burger', unit: 'pcs', price: 100, image: ''),
+    );
+    controller.takeAwayCustomerName.value = 'Anu';
+    controller.takeAwayCustomerPhone.value = '9876543210';
+
+    expect(await controller.saveTakeAwayKitchenBill(staffId: 1), isTrue);
+    final item = controller.cart.single;
+    expect(item.kotProductReferences.single.orderId, 1001);
+    expect(item.kotProductReferences.single.detailId, 937);
+
+    expect(await controller.removeKotProduct(item), isTrue);
+    expect(removeRepository.requests, hasLength(1));
+    expect(removeRepository.requests.single.orderId, 1001);
+    expect(removeRepository.requests.single.detailId, 937);
+    expect(removeRepository.requests.single.personId, isNull);
+    expect(controller.cart, isEmpty);
   });
 
   test('loads the current pending take-away order using its hold ID', () async {
@@ -357,7 +725,7 @@ void main() {
     expect(saveRepository.requests, isEmpty);
 
     expect(await controller.completeTakeAwayOrder(), isTrue);
-    expect(saveRepository.requests.single.holdOrderId, 97);
+    expect(saveRepository.requests.single.holdOrderIds, [97]);
     expect(controller.isTakeAwayOrderCompleted.value, isTrue);
   });
 
@@ -396,10 +764,47 @@ void main() {
     );
 
     expect(closed, isTrue);
-    expect(repository.requests.single.holdOrderId, 162);
+    expect(repository.requests.single.holdOrderIds, [162]);
     expect(controller.takeAwayProcessingOrders, isEmpty);
     expect(controller.completedTakeAwayOrders.single.customerName, 'test');
   });
+
+  test(
+    'completes take-away when save response omits the final order',
+    () async {
+      final repository = _FakeTakeAwaySaveOrderWithoutOrderRepository();
+      final controller = HomeController(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        TakeAwaySaveOrderUseCase(repository),
+      )..selectFlow(PosFlow.takeAway);
+      controller.takeAwayHoldOrderId.value = 623;
+      controller.takeAwayHoldOrderIds.assignAll(<int>[623]);
+      controller.savedOrderNumber.value = 'TA-623';
+      controller.backendSubtotal.value = 100;
+      controller.backendGst.value = 5;
+      controller.backendTotal.value = 105;
+
+      expect(await controller.completeTakeAwayOrder(), isTrue);
+      expect(controller.takeAwaySaveOrderError.value, isNull);
+      expect(controller.completedTakeAwayOrder.value?.orderId, 'TA-623');
+      expect(controller.completedTakeAwayOrder.value?.subtotal, 100);
+      expect(controller.completedTakeAwayOrder.value?.gst, 5);
+      expect(controller.completedTakeAwayOrder.value?.total, 105);
+    },
+  );
 
   test(
     'take away kitchen bill holds every product with kitchen flags',
@@ -441,7 +846,6 @@ void main() {
       controller.addProduct(tea);
       controller.setItemAmount(controller.cart.first, 0.45);
       controller.updateItemNotes(controller.cart.first, 'extra salt');
-      controller.setKitchenItemSelected(controller.cart.first, true);
       controller.takeAwayCustomerName.value = 'Anu';
       controller.takeAwayCustomerPhone.value = '9876543210';
       expect(repository.requests, isEmpty);
@@ -460,7 +864,7 @@ void main() {
       expect(repository.requests.single.products[0].productId, 4);
       expect(repository.requests.single.products[0].apiQuantity, '0.45kg');
       expect(repository.requests.single.products[0].note, 'extra salt');
-      expect(repository.requests.single.products[0].isKot, isTrue);
+      expect(repository.requests.single.products[0].isKot, isFalse);
       expect(repository.requests.single.products[1].productId, 5);
       expect(repository.requests.single.products[1].apiQuantity, '1pcs');
       expect(repository.requests.single.products[1].isKot, isFalse);
@@ -469,19 +873,28 @@ void main() {
       expect(controller.savedOrderNumber.value, 'TA-1001');
       expect(controller.takeAwayHoldOrderId.value, 1001);
       expect(controller.pendingTakeAwayHoldIds, contains(1001));
-      expect(controller.lastKitchenOrderItems.single.product.id, 4);
+      expect(controller.lastKitchenOrderItems, hasLength(2));
 
-      expect(await controller.saveTakeAwayKitchenBill(staffId: 1), isFalse);
-      expect(repository.requests, hasLength(1));
       expect(
-        controller.takeAwayHoldError.value,
-        contains('already in Pending'),
+        await controller.prepareTakeAwayOrderForCompletion(staffId: 1),
+        isTrue,
       );
+      expect(repository.requests, hasLength(1));
+      expect(repository.requests.single.printKitchen, isTrue);
 
       expect(await controller.completeTakeAwayOrder(), isTrue);
-      expect(saveRepository.requests.single.holdOrderId, 1001);
+      expect(saveRepository.requests.single.holdOrderIds, [1001]);
       expect(controller.pendingTakeAwayHoldIds, isEmpty);
       expect(controller.savedOrderNumber.value, 'TA-FINAL-1001');
+      expect(controller.completedTakeAwayOrder.value?.subtotal, 45);
+      expect(controller.completedTakeAwayOrder.value?.gst, 2.25);
+      expect(controller.completedTakeAwayOrder.value?.discountAmount, 3);
+      expect(controller.completedTakeAwayOrder.value?.charge, 1.5);
+      expect(controller.completedTakeAwayOrder.value?.total, 47.25);
+      final receiptItems = controller.completedTakeAwayReceiptItems;
+      expect(receiptItems, hasLength(2));
+      expect(receiptItems.first.product.price, 55.56);
+      expect(receiptItems.first.total, 25);
       expect(await controller.completeTakeAwayOrder(), isTrue);
       expect(saveRepository.requests, hasLength(1));
       expect(controller.completedTakeAwayOrders, hasLength(1));
@@ -495,10 +908,55 @@ void main() {
     },
   );
 
+  test('take away close hold sends every product as pending KOT', () async {
+    final repository = _FakeTakeAwayHoldRepository();
+    final controller = HomeController(
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      TakeAwayHoldUseCase(repository),
+    )..selectFlow(PosFlow.takeAway);
+    controller.addProduct(
+      const Product(id: 4, name: 'Burger', unit: 'kg', price: 100, image: ''),
+    );
+    controller.addProduct(
+      const Product(id: 3, name: 'Tea', unit: 'pcs', price: 20, image: ''),
+    );
+    controller.setItemAmount(controller.cart.first, 0.45);
+    controller.takeAwayCustomerName.value = 'Jenil';
+    controller.takeAwayCustomerPhone.value = '0987654321';
+
+    expect(
+      await controller.prepareTakeAwayOrderForCompletion(staffId: 1),
+      isTrue,
+    );
+
+    expect(repository.requests, hasLength(1));
+    expect(repository.requests.single.products, hasLength(2));
+    expect(repository.requests.single.products[0].productId, 4);
+    expect(repository.requests.single.products[0].apiQuantity, '0.45kg');
+    expect(repository.requests.single.products[0].isKot, isFalse);
+    expect(repository.requests.single.products[1].productId, 3);
+    expect(repository.requests.single.products[1].apiQuantity, '1pcs');
+    expect(repository.requests.single.products[1].isKot, isFalse);
+    expect(controller.lastKitchenOrderItems, isEmpty);
+  });
+
   test(
-    'take away close hold sends all products with individual kitchen flags',
+    'next take away kitchen bill sends only new products and quantity',
     () async {
-      final repository = _FakeTakeAwayHoldRepository();
+      final repository = _FakeTakeAwayHoldRepository(secondResponseId: 2002);
+      final saveRepository = _FakeTakeAwaySaveOrderRepository();
       final controller = HomeController(
         null,
         null,
@@ -514,32 +972,66 @@ void main() {
         null,
         null,
         TakeAwayHoldUseCase(repository),
+        TakeAwaySaveOrderUseCase(saveRepository),
       )..selectFlow(PosFlow.takeAway);
-      controller.addProduct(
-        const Product(id: 4, name: 'Burger', unit: 'kg', price: 100, image: ''),
+      const burger = Product(
+        id: 4,
+        name: 'Burger',
+        unit: 'pcs',
+        price: 100,
+        image: '',
       );
-      controller.addProduct(
-        const Product(id: 3, name: 'Tea', unit: 'pcs', price: 20, image: ''),
+      const tea = Product(
+        id: 5,
+        name: 'Tea',
+        unit: 'pcs',
+        price: 20,
+        image: '',
       );
-      controller.setItemAmount(controller.cart.first, 0.45);
-      controller.setKitchenItemSelected(controller.cart.last, true);
-      controller.takeAwayCustomerName.value = 'Jenil';
-      controller.takeAwayCustomerPhone.value = '0987654321';
+      const cake = Product(
+        id: 6,
+        name: 'Cake',
+        unit: 'pcs',
+        price: 50,
+        image: '',
+      );
+      controller.addProduct(burger);
+      controller.addProduct(tea);
+      controller.takeAwayCustomerName.value = 'Anu';
+      controller.takeAwayCustomerPhone.value = '9876543210';
 
-      expect(
-        await controller.prepareTakeAwayOrderForCompletion(staffId: 1),
-        isTrue,
-      );
-
-      expect(repository.requests, hasLength(1));
+      expect(controller.canSendTakeAwayKitchenBill, isTrue);
+      expect(await controller.saveTakeAwayKitchenBill(staffId: 1), isTrue);
       expect(repository.requests.single.products, hasLength(2));
-      expect(repository.requests.single.products[0].productId, 4);
-      expect(repository.requests.single.products[0].apiQuantity, '0.45kg');
-      expect(repository.requests.single.products[0].isKot, isFalse);
-      expect(repository.requests.single.products[1].productId, 3);
-      expect(repository.requests.single.products[1].apiQuantity, '1pcs');
-      expect(repository.requests.single.products[1].isKot, isTrue);
-      expect(controller.lastKitchenOrderItems.single.product.id, 3);
+      expect(controller.hasTakeAwayPendingKitchenItems, isFalse);
+      expect(controller.canSendTakeAwayKitchenBill, isFalse);
+
+      controller.confirmKitchenOrderPrinted();
+      controller.increment(controller.cart.last);
+      controller.addProduct(cake);
+
+      expect(controller.hasTakeAwayPendingKitchenItems, isTrue);
+      expect(controller.canSendTakeAwayKitchenBill, isTrue);
+      expect(await controller.saveTakeAwayKitchenBill(staffId: 1), isTrue);
+
+      expect(repository.requests, hasLength(2));
+      expect(repository.requests.first.holdOrderId, isNull);
+      expect(repository.requests.last.holdOrderId, 1001);
+      expect(repository.requests.last.toFormFields()['hold_order_id'], 1001);
+      expect(controller.takeAwayHoldOrderId.value, 1001);
+      expect(controller.takeAwayHoldOrderIds, [1001, 2002]);
+      final deltaProducts = repository.requests.last.products;
+      expect(deltaProducts, hasLength(2));
+      expect(deltaProducts[0].productId, tea.id);
+      expect(deltaProducts[0].apiQuantity, '1pcs');
+      expect(deltaProducts[1].productId, cake.id);
+      expect(deltaProducts[1].apiQuantity, '1pcs');
+      expect(controller.lastKitchenOrderItems, hasLength(2));
+      expect(controller.hasTakeAwayPendingKitchenItems, isFalse);
+      expect(controller.canSendTakeAwayKitchenBill, isFalse);
+
+      expect(await controller.completeTakeAwayOrder(), isTrue);
+      expect(saveRepository.requests.single.holdOrderIds, [1001, 2002]);
     },
   );
 
@@ -617,7 +1109,7 @@ void main() {
   );
 
   test(
-    'locks take-away cart changes after its backend hold is created',
+    'allows new take-away products and quantity after kitchen bill',
     () async {
       final controller = HomeController()..selectFlow(PosFlow.takeAway);
       const burger = Product(
@@ -642,22 +1134,44 @@ void main() {
       controller.increment(heldItem);
       controller.updateItemNotes(heldItem, 'changed');
 
-      expect(controller.cart, hasLength(1));
-      expect(heldItem.quantity, 1);
-      expect(heldItem.notes, isEmpty);
-      expect(await controller.decrement(heldItem), isFalse);
-      expect(
-        controller.setItemAmount(heldItem, 2),
-        HomeController.takeAwayCartLockedMessage,
-      );
-      expect(
-        controller.addProductFromQr('5').error,
-        HomeController.takeAwayCartLockedMessage,
-      );
-      controller.remove(heldItem);
-      expect(controller.cart.single, same(heldItem));
+      expect(controller.cart, hasLength(2));
+      expect(heldItem.quantity, 2);
+      expect(heldItem.notes, 'changed');
+      expect(controller.hasTakeAwayPendingKitchenItems, isTrue);
     },
   );
+
+  test('take-away receipt totals ignore a partial backend response', () {
+    final controller = HomeController()..selectFlow(PosFlow.takeAway);
+    controller.cart.assignAll([
+      CartItem(
+        product: const Product(
+          id: 1,
+          name: 'Cake',
+          unit: 'pcs',
+          price: 999.89,
+          image: '',
+        ),
+      ),
+      CartItem(
+        product: const Product(
+          id: 2,
+          name: 'Juice',
+          unit: 'pcs',
+          price: 200,
+          image: '',
+        ),
+      ),
+    ]);
+    controller.backendSubtotal.value = 190.48;
+    controller.backendGst.value = 9.52;
+    controller.backendTotal.value = 200;
+
+    expect(controller.subtotal, 190.48);
+    expect(controller.cartItemsSubtotal, closeTo(1199.89, 0.000001));
+    expect(controller.cartItemsTax, 0);
+    expect(controller.cartItemsTotal, closeTo(1199.89, 0.000001));
+  });
 
   testWidgets('take away billing shows kitchen bill and take away actions', (
     tester,
@@ -696,13 +1210,8 @@ void main() {
       find.widgetWithText(OutlinedButton, 'Customer Details'),
       findsOneWidget,
     );
-    expect(find.byType(Checkbox), findsWidgets);
+    expect(find.byType(Checkbox), findsNothing);
     expect(controller.kitchenSelectedItems, isEmpty);
-
-    await tester.tap(find.byType(Checkbox).first);
-    await tester.pump();
-    expect(controller.kitchenSelectedItems, contains(controller.cart.first));
-    expect(controller.kitchenSelectedItems, hasLength(1));
 
     await tester.tap(find.widgetWithText(FilledButton, 'Kitchen Bill'));
     await tester.pumpAndSettle();
@@ -751,23 +1260,76 @@ class _FakeOrderRepository implements OrderRepository {
 }
 
 class _FakeTakeAwayHoldRepository implements TakeAwayHoldRepository {
+  _FakeTakeAwayHoldRepository({
+    this.secondResponseId,
+    this.includeProductDetails = false,
+  });
+
   final requests = <TakeAwayHoldRequest>[];
+  final int? secondResponseId;
+  final bool includeProductDetails;
 
   @override
   Future<TakeAwayHoldResponse> holdTakeAway(TakeAwayHoldRequest request) async {
     requests.add(request);
-    return const TakeAwayHoldResponse(
+    final responseId = requests.length > 1 && secondResponseId != null
+        ? secondResponseId!
+        : 1001;
+    return TakeAwayHoldResponse(
       status: true,
       message: 'Take-away order held',
-      data: SaveOrderData(
-        order: SavedOrder(
-          id: 1001,
-          orderId: 'TA-1001',
+      data: TakeAwayHoldData(
+        isProcessing: true,
+        order: TakeAwayHoldOrder(
+          id: responseId,
+          orderId: 'TA-$responseId',
           subtotal: 45,
           gst: 2.25,
           total: 47.25,
+          products: includeProductDetails
+              ? const <TakeAwayHoldProduct>[
+                  TakeAwayHoldProduct(
+                    id: 937,
+                    orderId: 1001,
+                    productId: 4,
+                    quantity: 1,
+                  ),
+                ]
+              : const <TakeAwayHoldProduct>[],
         ),
       ),
+    );
+  }
+}
+
+class _FakeTakeAwayRemoveProductRepository
+    implements TakeAwayRemoveProductRepository {
+  final requests = <RemoveKotProductRequest>[];
+
+  @override
+  Future<RemoveKotProductResponse> removeTakeAwayProduct(
+    RemoveKotProductRequest request,
+  ) async {
+    requests.add(request);
+    return const RemoveKotProductResponse(
+      status: true,
+      message: 'Take-away product removed',
+    );
+  }
+}
+
+class _FakeTakeAwayChangeQuantityRepository
+    implements TakeAwayChangeQuantityRepository {
+  final requests = <TakeAwayChangeQuantityRequest>[];
+
+  @override
+  Future<TakeAwayChangeQuantityResponse> changeTakeAwayQuantity(
+    TakeAwayChangeQuantityRequest request,
+  ) async {
+    requests.add(request);
+    return const RemoveKotQuantityResponse(
+      status: true,
+      message: 'Quantity changed',
     );
   }
 }
@@ -788,8 +1350,46 @@ class _FakeTakeAwaySaveOrderRepository implements TakeAwaySaveOrderRepository {
         orderId: 'TA-FINAL-1001',
         subtotal: 45,
         gst: 2.25,
+        discountAmount: 3,
+        charge: 1.5,
         total: 47.25,
+        paymentMode: 'cash',
+        products: <SavedOrderProduct>[
+          SavedOrderProduct(
+            id: 10,
+            productId: 4,
+            productName: 'Burger',
+            price: 55.56,
+            quantity: 1,
+            unitValue: 0.45,
+            unit: 'kg',
+            rowTotal: 25,
+          ),
+          SavedOrderProduct(
+            id: 11,
+            productId: 5,
+            productName: 'Tea',
+            price: 20,
+            quantity: 1,
+            unitValue: 1,
+            unit: 'pcs',
+            rowTotal: 20,
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _FakeTakeAwaySaveOrderWithoutOrderRepository
+    implements TakeAwaySaveOrderRepository {
+  @override
+  Future<TakeAwaySaveOrderResponse> saveTakeAwayOrder(
+    TakeAwaySaveOrderRequest request,
+  ) async {
+    return const TakeAwaySaveOrderResponse(
+      status: true,
+      message: 'Take-away order saved',
     );
   }
 }

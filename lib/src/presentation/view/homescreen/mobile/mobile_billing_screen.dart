@@ -95,10 +95,12 @@ class MobileBillingScreen extends StatelessWidget {
                       children: controller.cart
                           .map(
                             (item) => GestureDetector(
-                              onTap: () => controller.setKitchenItemSelected(
-                                item,
-                                !controller.isKitchenItemSelected(item),
-                              ),
+                              onTap: controller.flow.value == PosFlow.kot
+                                  ? () => controller.setKitchenItemSelected(
+                                      item,
+                                      !controller.isKitchenItemSelected(item),
+                                    )
+                                  : null,
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 9,
@@ -110,15 +112,10 @@ class MobileBillingScreen extends StatelessWidget {
                                           CrossAxisAlignment.center,
                                       children: [
                                         if (controller.flow.value ==
-                                                PosFlow.kot ||
-                                            controller.flow.value ==
-                                                PosFlow.takeAway) ...[
+                                            PosFlow.kot) ...[
                                           Tooltip(
                                             message:
-                                                controller.flow.value ==
-                                                    PosFlow.takeAway
-                                                ? 'Include ${item.product.name} in Kitchen Bill'
-                                                : 'Send ${item.product.name} to kitchen',
+                                                'Send ${item.product.name} to kitchen',
                                             child: CustomCheckbox(
                                               // activeColor: AppColors.primaryDark,
 
@@ -393,20 +390,14 @@ class MobileBillingScreen extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed:
-                    controller.cart.isEmpty ||
-                        controller.kitchenSelectedItems.isEmpty ||
-                        controller.isSavingTakeAwayHold.value ||
-                        (controller.takeAwayHoldOrderId.value != null &&
-                            controller.lastKitchenOrderItems.isEmpty &&
-                            !controller.hasTakeAwayPendingKitchenItems)
-                    ? null
-                    : () => sendTakeAwayKotBill(context, controller),
+                onPressed: controller.canSendTakeAwayKitchenBill
+                    ? () => sendTakeAwayKotBill(context, controller)
+                    : null,
                 icon: const Icon(Icons.soup_kitchen_outlined, size: 19),
                 label: Text(
                   controller.takeAwayHoldOrderId.value != null &&
                           !controller.hasTakeAwayPendingKitchenItems
-                      ? 'Retry Kitchen Bill'
+                      ? 'Kitchen Bill Sent'
                       : 'Kitchen Bill',
                 ),
                 style: FilledButton.styleFrom(
