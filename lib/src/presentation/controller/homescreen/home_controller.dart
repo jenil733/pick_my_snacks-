@@ -3016,7 +3016,7 @@ class HomeController extends GetxController {
     try {
       final activePersonNumber = activeKotPersonNumber.value;
       final personId = activePersonNumber == null
-          ? null
+          ? kotPersonBills[tableId]?.firstOrNull?.personId
           : kotPersonBills[tableId]
                 ?.firstWhereOrNull(
                   (bill) => bill.personNumber == activePersonNumber,
@@ -3548,7 +3548,7 @@ class HomeController extends GetxController {
   }) {
     final activePersonNumber = activeKotPersonNumber.value;
     final personId = activePersonNumber == null
-        ? null
+        ? kotPersonBills[tableId]?.firstOrNull?.personId
         : kotPersonBills[tableId]
               ?.firstWhereOrNull(
                 (bill) => bill.personNumber == activePersonNumber,
@@ -4329,13 +4329,15 @@ class HomeController extends GetxController {
     }
 
     final activePersonNumber = activeKotPersonNumber.value;
-    final personId = tableId == null || activePersonNumber == null
+    final personId = tableId == null
         ? null
-        : kotPersonBills[tableId]
-              ?.firstWhereOrNull(
-                (bill) => bill.personNumber == activePersonNumber,
-              )
-              ?.personId;
+        : activePersonNumber == null
+            ? kotPersonBills[tableId]?.firstOrNull?.personId
+            : kotPersonBills[tableId]
+                  ?.firstWhereOrNull(
+                    (bill) => bill.personNumber == activePersonNumber,
+                  )
+                  ?.personId;
     final normalizedPersonId = personId?.trim();
 
     final removeQuantity = item.effectiveWeightKg == null ? 1 : 0.1;
@@ -4569,13 +4571,15 @@ class HomeController extends GetxController {
     try {
       final tableId = activeTableNumber.value;
       final activePersonNumber = activeKotPersonNumber.value;
-      final personId = tableId == null || activePersonNumber == null
+      final personId = tableId == null
           ? null
-          : kotPersonBills[tableId]
-                ?.firstWhereOrNull(
-                  (bill) => bill.personNumber == activePersonNumber,
-                )
-                ?.personId;
+          : activePersonNumber == null
+              ? kotPersonBills[tableId]?.firstOrNull?.personId
+              : kotPersonBills[tableId]
+                    ?.firstWhereOrNull(
+                      (bill) => bill.personNumber == activePersonNumber,
+                    )
+                    ?.personId;
       debugPrint(
         '[RemoveKotProduct] Active target: table=$tableId, '
         'personNumber=$activePersonNumber, personId=$personId',
